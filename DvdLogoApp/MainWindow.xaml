@@ -12,7 +12,7 @@
         WindowStartupLocation="CenterScreen"
         Background="#070A0F"
         Foreground="#F7FAFC"
-        FontFamily="Futura Md BT, Futura Medium, Futura, Segoe UI"
+        FontFamily="Segoe UI"
         FontWeight="Medium">
     <Window.Resources>
         <SolidColorBrush x:Key="PanelBrush" Color="#CC101722" />
@@ -26,7 +26,6 @@
             <Setter Property="BorderBrush" Value="#F7FAFC" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Foreground" Value="#070A0F" />
-            <Setter Property="FontFamily" Value="Futura Md BT, Futura Medium, Futura, Segoe UI" />
             <Setter Property="FontSize" Value="16" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />

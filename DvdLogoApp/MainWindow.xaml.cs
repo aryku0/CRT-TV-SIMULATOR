@@ -70,6 +70,7 @@ public partial class MainWindow : Window
         satisfactionFadeTimer.Tick += SatisfactionFadeTimer_Tick;
 
         InitializeComponent();
+        LoadBundledFont();
 
         bounceTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
@@ -114,6 +115,19 @@ public partial class MainWindow : Window
 
         logoTemplate = bitmap;
         ApplyLogoColor(Colors.White);
+    }
+
+    private void LoadBundledFont()
+    {
+        var fontDirectory = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts");
+
+        if (!Directory.Exists(fontDirectory))
+        {
+            return;
+        }
+
+        var fontDirectoryUri = new Uri(fontDirectory + Path.DirectorySeparatorChar, UriKind.Absolute);
+        FontFamily = new FontFamily(fontDirectoryUri, "./#Jost*");
     }
 
     private void PlayIntroSound()
