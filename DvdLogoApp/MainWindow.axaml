@@ -1,0 +1,224 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:DvdLogoApp"
+        mc:Ignorable="d"
+        d:DesignWidth="980"
+        d:DesignHeight="640"
+        x:Class="DvdLogoApp.MainWindow"
+        Title="DVD Logo Satisfaction"
+        Width="980"
+        Height="640"
+        MinWidth="760"
+        MinHeight="520"
+        WindowStartupLocation="CenterScreen"
+        Background="#070A0F"
+        Foreground="#F7FAFC"
+        FontFamily="{StaticResource JostFont}"
+        FontWeight="Medium">
+    <Window.Resources>
+        <FontFamily x:Key="JostFont">avares://DvdLogoApp/Assets/Fonts#Jost</FontFamily>
+        <SolidColorBrush x:Key="PanelBrush" Color="#CC101722" />
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="#334156" />
+        <SolidColorBrush x:Key="SoftTextBrush" Color="#AAB8C8" />
+    </Window.Resources>
+
+    <Window.Styles>
+        <Style Selector="Button.rounded">
+            <Setter Property="Height" Value="48" />
+            <Setter Property="Padding" Value="24,0" />
+            <Setter Property="Background" Value="#F7FAFC" />
+            <Setter Property="BorderBrush" Value="#F7FAFC" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="24" />
+            <Setter Property="Foreground" Value="#070A0F" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style Selector="Button.rounded:pointerover">
+            <Setter Property="Background" Value="#E9EEF5" />
+            <Setter Property="BorderBrush" Value="#E9EEF5" />
+        </Style>
+
+        <Style Selector="Button.rounded:pressed">
+            <Setter Property="Background" Value="#D8E1EC" />
+            <Setter Property="BorderBrush" Value="#D8E1EC" />
+        </Style>
+
+        <Style Selector="ToggleButton.option-toggle">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Content="{TemplateBinding Content}" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="22">
+        <Border Background="#0B1018"
+                BorderBrush="#253142"
+                BorderThickness="1"
+                CornerRadius="32"
+                ClipToBounds="True">
+            <Grid x:Name="ScreenSurface"
+                  ClipToBounds="True">
+                <Canvas x:Name="BounceStage"
+                        ClipToBounds="True"
+                        SizeChanged="BounceStage_SizeChanged">
+                    <Canvas.Background>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                            <GradientStop Color="#05070A" Offset="0" />
+                            <GradientStop Color="#111A25" Offset="0.55" />
+                            <GradientStop Color="#07090D" Offset="1" />
+                        </LinearGradientBrush>
+                    </Canvas.Background>
+
+                    <Image x:Name="DvdLogoImage"
+                           Width="260"
+                           Height="146"
+                           Stretch="Uniform"
+                           Opacity="0" />
+                </Canvas>
+
+                <Border x:Name="SatisfactionRevealZone"
+                        Width="620"
+                        Height="84"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom"
+                        Margin="0,0,0,8"
+                        Background="Transparent"
+                        PointerEntered="SatisfactionRevealZone_PointerEntered"
+                        PointerMoved="SatisfactionRevealZone_PointerMoved" />
+
+                <StackPanel x:Name="ControlsPanel"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Bottom"
+                            Width="560"
+                            Margin="0,0,0,28"
+                            Opacity="0">
+                    <Button x:Name="StartButton"
+                            Content="Start"
+                            Width="168"
+                            HorizontalAlignment="Center"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            Margin="0,0,0,16"
+                            Classes="rounded"
+                            Cursor="Hand"
+                            Click="StartButton_Click" />
+
+                    <Border x:Name="SatisfactionPanel"
+                            Padding="14,8"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource PanelBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="20"
+                            PointerEntered="SatisfactionPanel_PointerEntered"
+                            PointerMoved="SatisfactionPanel_PointerMoved"
+                            PointerPressed="SatisfactionPanel_PointerPressed">
+                        <Grid ColumnDefinitions="112,*,44,30">
+                            <TextBlock Text="Satisfaction"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource SoftTextBrush}"
+                                       FontSize="13"
+                                       FontWeight="Medium" />
+
+                            <Grid x:Name="SatisfactionSliderShell"
+                                  Grid.Column="1"
+                                  Height="24"
+                                  Margin="8,0,12,0"
+                                  VerticalAlignment="Center"
+                                  SizeChanged="SatisfactionSliderShell_SizeChanged">
+                                <Border Height="5"
+                                        VerticalAlignment="Center"
+                                        Background="#263140"
+                                        CornerRadius="2.5" />
+                                <Border x:Name="SatisfactionSliderFill"
+                                        Width="0"
+                                        Height="5"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Background="#F7FAFC"
+                                        CornerRadius="2.5" />
+                                <Ellipse x:Name="SatisfactionSliderThumb"
+                                         Width="20"
+                                         Height="20"
+                                         HorizontalAlignment="Left"
+                                         VerticalAlignment="Center"
+                                         Fill="#F7FAFC"
+                                         Stroke="#D7E0EA"
+                                         StrokeThickness="1" />
+                                <Slider x:Name="SatisfactionSlider"
+                                        Minimum="0"
+                                        Maximum="100"
+                                        Value="35"
+                                        TickFrequency="5"
+                                        Height="24"
+                                        Opacity="0.01"
+                                        Background="Transparent"
+                                        Foreground="Transparent"
+                                        BorderBrush="Transparent"
+                                        Focusable="False"
+                                        VerticalAlignment="Stretch"
+                                        ValueChanged="SatisfactionSlider_ValueChanged" />
+                            </Grid>
+
+                            <TextBlock x:Name="SatisfactionValueText"
+                                       Grid.Column="2"
+                                       Text="35%"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Right"
+                                       Foreground="#F7FAFC"
+                                       FontSize="13"
+                                       FontWeight="Medium" />
+
+                            <ToggleButton x:Name="KeepSatisfactionVisibleToggle"
+                                          Grid.Column="3"
+                                          HorizontalAlignment="Right"
+                                          VerticalAlignment="Center"
+                                          Classes="option-toggle"
+                                          ToolTip.Tip="Keep visible"
+                                          Click="KeepSatisfactionVisibleToggle_Click">
+                                <Grid Width="22"
+                                      Height="22">
+                                    <Border x:Name="OptionBox"
+                                            Background="#263140"
+                                            BorderBrush="#4B5A6D"
+                                            BorderThickness="1"
+                                            CornerRadius="8" />
+                                    <Ellipse x:Name="OptionCircle"
+                                             Width="12"
+                                             Height="12"
+                                             Fill="Transparent"
+                                             Stroke="#9DABBB"
+                                             StrokeThickness="1.5"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                                    <Ellipse x:Name="OptionDot"
+                                             Width="5"
+                                             Height="5"
+                                             Fill="#070A0F"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"
+                                             IsVisible="False" />
+                                </Grid>
+                            </ToggleButton>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <local:CrtOverlayControl x:Name="CrtOverlay"
+                                         IsHitTestVisible="False" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
