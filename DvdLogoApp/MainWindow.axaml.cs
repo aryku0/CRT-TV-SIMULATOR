@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private const string LogoFileName = "DVD_video_logo.png";
     private const string IntroSoundFileName = "edr-old-pc-monitor-switch-on-and-degaussing-8576.mp3";
     private const double FixedLogoSpeed = 262;
+    private const int CornerRepeatWindow = 5;
 
     private enum StageCorner
     {
@@ -54,6 +55,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer introTimer;
     private readonly Random random = new();
     private readonly List<AudioClip> bounceClips = new();
+    private readonly List<StageCorner> recentCornerHits = [];
 
     private CancellationTokenSource? satisfactionOpacityCancellation;
     private AudioClip? introClip;
@@ -239,6 +241,7 @@ public partial class MainWindow : Window
         velocity = CreateInitialVelocity();
         currentCornerTarget = null;
         lastCornerHit = null;
+        recentCornerHits.Clear();
         ApplySatisfactionBounce();
 
         isBouncing = true;
@@ -729,8 +732,22 @@ public partial class MainWindow : Window
 
         var corner = GetCurrentCorner(maxX, maxY);
         lastCornerHit = corner;
+        RememberCornerHit(corner);
 
         return corner;
+    }
+
+    private void RememberCornerHit(StageCorner corner)
+    {
+        recentCornerHits.Remove(corner);
+        recentCornerHits.Add(corner);
+
+        var maximumHistory = Math.Min(CornerRepeatWindow - 1, GetStageCorners().Length);
+
+        while (recentCornerHits.Count > maximumHistory)
+        {
+            recentCornerHits.RemoveAt(0);
+        }
     }
 
     private void NudgeLogoAwayFromCorner(StageCorner corner, double maxX, double maxY)
@@ -792,34 +809,65 @@ public partial class MainWindow : Window
             viableCorners = viableCorners.Where(corner => corner.Corner != currentCorner.Value);
         }
 
+        var repeatSafeCorners = GetRepeatSafeCorners(viableCorners);
+
         if (lastCornerHit is not null)
         {
-            var preferredCorners = viableCorners
-                .Where(corner => corner.Corner != lastCornerHit.Value)
-                .Where(corner => !SharesSide(corner.Corner, lastCornerHit.Value))
-                .ToArray();
-
-            if (preferredCorners.Length > 0)
+            if (repeatSafeCorners.Any(corner => !recentCornerHits.Contains(corner.Corner)))
             {
-                return GetClosestCornerPosition(preferredCorners, currentPosition);
+                var preferredCorners = repeatSafeCorners
+                    .Where(corner => corner.Corner != lastCornerHit.Value)
+                    .Where(corner => !SharesSide(corner.Corner, lastCornerHit.Value))
+                    .ToArray();
+
+                if (preferredCorners.Length > 0)
+                {
+                    return GetBestCornerPosition(preferredCorners, currentPosition);
+                }
             }
 
-            viableCorners = corners.Where(corner => corner.Corner != lastCornerHit.Value);
+            var differentCornerCandidates = repeatSafeCorners
+                .Where(corner => corner.Corner != lastCornerHit.Value)
+                .ToArray();
 
-            if (currentCorner is not null)
+            if (differentCornerCandidates.Length > 0)
             {
-                viableCorners = viableCorners.Where(corner => corner.Corner != currentCorner.Value);
+                return GetBestCornerPosition(differentCornerCandidates, currentPosition);
             }
         }
 
-        var candidates = viableCorners.ToArray();
+        var candidates = repeatSafeCorners;
 
         if (candidates.Length == 0)
         {
             candidates = corners;
         }
 
-        return GetClosestCornerPosition(candidates, currentPosition);
+        return GetBestCornerPosition(candidates, currentPosition);
+    }
+
+    private (StageCorner Corner, Point Position)[] GetRepeatSafeCorners(
+        IEnumerable<(StageCorner Corner, Point Position)> corners)
+    {
+        var candidates = corners.ToArray();
+
+        if (candidates.Length == 0)
+        {
+            return [];
+        }
+
+        var freshCorners = candidates
+            .Where(corner => !recentCornerHits.Contains(corner.Corner))
+            .ToArray();
+
+        if (freshCorners.Length > 0)
+        {
+            return freshCorners;
+        }
+
+        return candidates
+            .OrderBy(corner => GetRecentCornerIndex(corner.Corner))
+            .ToArray();
     }
 
     private (StageCorner Corner, Point Position)[] GetStageCorners()
@@ -850,14 +898,26 @@ public partial class MainWindow : Window
         };
     }
 
-    private static Point GetClosestCornerPosition(
+    private Point GetBestCornerPosition(
         IEnumerable<(StageCorner Corner, Point Position)> corners,
         Point currentPosition)
     {
-        return corners
-            .OrderBy(corner => GetDistanceSquared(corner.Position, currentPosition))
+        var candidates = corners.ToArray();
+        var hasFreshCorner = candidates.Any(corner => !recentCornerHits.Contains(corner.Corner));
+
+        return candidates
+            .OrderBy(corner => hasFreshCorner && recentCornerHits.Contains(corner.Corner) ? 1 : 0)
+            .ThenBy(corner => hasFreshCorner ? 0 : GetRecentCornerIndex(corner.Corner))
+            .ThenBy(corner => GetDistanceSquared(corner.Position, currentPosition))
             .First()
             .Position;
+    }
+
+    private int GetRecentCornerIndex(StageCorner corner)
+    {
+        var index = recentCornerHits.IndexOf(corner);
+
+        return index < 0 ? int.MinValue : index;
     }
 
     private static Vector RotateByDegrees(Vector vector, double degrees)
