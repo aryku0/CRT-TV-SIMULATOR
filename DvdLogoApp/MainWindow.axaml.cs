@@ -52,12 +52,14 @@ public partial class MainWindow : Window
 
     private readonly DispatcherTimer bounceTimer;
     private readonly DispatcherTimer satisfactionFadeTimer;
+    private readonly DispatcherTimer fullscreenFadeTimer;
     private readonly DispatcherTimer introTimer;
     private readonly Random random = new();
     private readonly List<AudioClip> bounceClips = new();
     private readonly List<StageCorner> recentCornerHits = [];
 
     private CancellationTokenSource? satisfactionOpacityCancellation;
+    private CancellationTokenSource? fullscreenOpacityCancellation;
     private AudioClip? introClip;
     private Bitmap? logoTemplate;
     private Vector velocity = new(280, 190);
@@ -70,8 +72,10 @@ public partial class MainWindow : Window
     private double introFinalY;
     private double logoX;
     private double logoY;
+    private bool isDraggingSatisfaction;
     private bool isBouncing;
 
+    // Sets up the window, timers, and starting visual state.
     public MainWindow()
     {
         InitializeComponent();
@@ -88,6 +92,12 @@ public partial class MainWindow : Window
         };
         satisfactionFadeTimer.Tick += SatisfactionFadeTimer_Tick;
 
+        fullscreenFadeTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(2)
+        };
+        fullscreenFadeTimer.Tick += FullscreenFadeTimer_Tick;
+
         introTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(16)
@@ -101,9 +111,11 @@ public partial class MainWindow : Window
         bounceTimer.Tick += BounceTimer_Tick;
 
         Loaded += Window_Loaded;
+        KeyDown += Window_KeyDown;
         Closed += Window_Closed;
     }
 
+    // Runs when the window opens: loads assets, plays the intro sound, and starts the intro animation.
     private void Window_Loaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         LoadLogo();
@@ -111,19 +123,24 @@ public partial class MainWindow : Window
         PositionLogoForIntro();
         PlayIntroSound();
         BeginIntroAnimation();
+        WakeFullscreenButton();
     }
 
+    // Stops timers and releases audio/image resources when the window closes.
     private void Window_Closed(object? sender, EventArgs e)
     {
         introTimer.Stop();
         bounceTimer.Stop();
         satisfactionFadeTimer.Stop();
+        fullscreenFadeTimer.Stop();
         satisfactionOpacityCancellation?.Cancel();
+        fullscreenOpacityCancellation?.Cancel();
         introClip?.Dispose();
         CloseBounceClips();
         logoTemplate?.Dispose();
     }
 
+    // Loads the DVD logo from the bundled Avalonia app assets.
     private void LoadLogo()
     {
         var logoUri = new Uri($"avares://DvdLogoApp/Assets/{LogoFileName}");
@@ -133,6 +150,7 @@ public partial class MainWindow : Window
         ApplyLogoColor(Colors.White);
     }
 
+    // Plays the CRT switch-on sound at startup if the MP3 is present.
     private void PlayIntroSound()
     {
         var audioPath = GetOutputAssetPath(IntroSoundFileName);
@@ -147,6 +165,7 @@ public partial class MainWindow : Window
         introClip.PlayFromStart();
     }
 
+    // Loads the bounce sound effects so one can be picked randomly on each bounce.
     private void LoadBounceSounds()
     {
         CloseBounceClips();
@@ -164,6 +183,7 @@ public partial class MainWindow : Window
         }
     }
 
+    // Starts the logo fade-in and upward movement before the controls appear.
     private void BeginIntroAnimation()
     {
         introTimer.Stop();
@@ -180,6 +200,7 @@ public partial class MainWindow : Window
         introTimer.Start();
     }
 
+    // Advances the intro animation a frame at a time.
     private void IntroTimer_Tick(object? sender, EventArgs e)
     {
         var elapsedSeconds = (DateTime.UtcNow - introStartTime).TotalSeconds;
@@ -213,6 +234,7 @@ public partial class MainWindow : Window
         WakeSatisfactionPanel();
     }
 
+    // Places the logo in its pre-start intro position.
     private void PositionLogoForIntro()
     {
         logoX = GetCenteredLogoX();
@@ -221,11 +243,149 @@ public partial class MainWindow : Window
         Canvas.SetTop(DvdLogoImage, logoY);
     }
 
+    // Starts the bouncing mode when the Start button is clicked.
     private void StartButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         StartBouncing();
     }
 
+    // Switches between the normal window and fullscreen when the fullscreen button is clicked.
+    private void FullscreenButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        WakeFullscreenButton();
+        ToggleFullscreen();
+    }
+
+    // Keeps the fullscreen icon visible while the pointer is over it.
+    private void FullscreenButton_PointerEntered(object? sender, PointerEventArgs e)
+    {
+        WakeFullscreenButton();
+    }
+
+    // Keeps the fullscreen icon visible while the pointer moves across it.
+    private void FullscreenButton_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        WakeFullscreenButton();
+    }
+
+    // Reveals the fullscreen icon when the pointer enters the invisible top-right zone.
+    private void FullscreenRevealZone_PointerEntered(object? sender, PointerEventArgs e)
+    {
+        WakeFullscreenButton();
+    }
+
+    // Reveals the fullscreen icon when the pointer moves through the invisible top-right zone.
+    private void FullscreenRevealZone_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        WakeFullscreenButton();
+    }
+
+    // Lets Escape leave fullscreen without closing the app.
+    private void Window_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape || WindowState != WindowState.FullScreen)
+        {
+            return;
+        }
+
+        ExitFullscreen();
+        e.Handled = true;
+    }
+
+    // Enters fullscreen if windowed, or returns to windowed mode if already fullscreen.
+    private void ToggleFullscreen()
+    {
+        if (WindowState == WindowState.FullScreen)
+        {
+            ExitFullscreen();
+            return;
+        }
+
+        WindowState = WindowState.FullScreen;
+        UpdateFullscreenButtonText();
+    }
+
+    // Returns the app to normal windowed mode.
+    private void ExitFullscreen()
+    {
+        WindowState = WindowState.Normal;
+        UpdateFullscreenButtonText();
+    }
+
+    // Keeps the fullscreen button tooltip in sync with the current window mode.
+    private void UpdateFullscreenButtonText()
+    {
+        ToolTip.SetTip(
+            FullscreenButton,
+            WindowState == WindowState.FullScreen ? "Exit fullscreen" : "Fullscreen");
+    }
+
+    // Starts dissolving the fullscreen icon after it has not been touched for two seconds.
+    private void FullscreenFadeTimer_Tick(object? sender, EventArgs e)
+    {
+        fullscreenFadeTimer.Stop();
+        AnimateFullscreenButtonOpacity(0, TimeSpan.FromMilliseconds(650), hideWhenComplete: true);
+    }
+
+    // Shows the fullscreen icon and restarts its auto-hide timer.
+    private void WakeFullscreenButton()
+    {
+        if (FullscreenButton is null)
+        {
+            return;
+        }
+
+        FullscreenButton.IsVisible = true;
+        FullscreenButton.IsHitTestVisible = true;
+        AnimateFullscreenButtonOpacity(1, TimeSpan.FromMilliseconds(180), hideWhenComplete: false);
+
+        fullscreenFadeTimer.Stop();
+        fullscreenFadeTimer.Start();
+    }
+
+    // Smoothly fades the fullscreen icon and fully hides it after the fade-out finishes.
+    private async void AnimateFullscreenButtonOpacity(double opacity, TimeSpan duration, bool hideWhenComplete)
+    {
+        fullscreenOpacityCancellation?.Cancel();
+        var cancellation = new CancellationTokenSource();
+        fullscreenOpacityCancellation = cancellation;
+
+        var startOpacity = FullscreenButton.Opacity;
+        var startTime = DateTime.UtcNow;
+
+        try
+        {
+            while (true)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+
+                var elapsed = DateTime.UtcNow - startTime;
+                var progress = Clamp01(elapsed.TotalMilliseconds / duration.TotalMilliseconds);
+                FullscreenButton.Opacity = Lerp(startOpacity, opacity, EaseOutQuad(progress));
+
+                if (progress >= 1)
+                {
+                    break;
+                }
+
+                await Task.Delay(16, cancellation.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        FullscreenButton.Opacity = opacity;
+
+        if (hideWhenComplete)
+        {
+            FullscreenButton.IsHitTestVisible = false;
+            FullscreenButton.IsVisible = false;
+        }
+    }
+
+    // Switches from the intro screen into the live bouncing logo simulation.
     private void StartBouncing()
     {
         introTimer.Stop();
@@ -250,6 +410,7 @@ public partial class MainWindow : Window
         bounceTimer.Start();
     }
 
+    // Moves the logo each frame and handles wall hits, corner hits, sounds, colours, and retargeting.
     private void BounceTimer_Tick(object? sender, EventArgs e)
     {
         if (!isBouncing)
@@ -336,6 +497,7 @@ public partial class MainWindow : Window
         }
     }
 
+    // Plays one of the loaded bounce effects at random.
     private void PlayRandomBounceSound()
     {
         if (bounceClips.Count == 0)
@@ -346,6 +508,7 @@ public partial class MainWindow : Window
         bounceClips[random.Next(bounceClips.Count)].PlayFromStart();
     }
 
+    // Releases all loaded bounce sound players.
     private void CloseBounceClips()
     {
         foreach (var clip in bounceClips)
@@ -356,6 +519,7 @@ public partial class MainWindow : Window
         bounceClips.Clear();
     }
 
+    // Gives each bounce a 1-in-5 chance to change the logo colour.
     private void MaybeChangeLogoColor()
     {
         if (logoTemplate is null || random.Next(5) != 0)
@@ -376,6 +540,7 @@ public partial class MainWindow : Window
         ApplyLogoColor(nextColor);
     }
 
+    // Applies a colour to the logo while keeping the white background transparent.
     private void ApplyLogoColor(Color color)
     {
         if (logoTemplate is null)
@@ -387,6 +552,7 @@ public partial class MainWindow : Window
         DvdLogoImage.Source = CreateTintedLogo(logoTemplate, color);
     }
 
+    // Rebuilds the logo bitmap by tinting dark pixels and clearing pale background pixels.
     private static WriteableBitmap CreateTintedLogo(Bitmap source, Color color)
     {
         var bitmap = new WriteableBitmap(source.PixelSize, source.Dpi, PixelFormat.Bgra8888, AlphaFormat.Unpremul);
@@ -434,6 +600,7 @@ public partial class MainWindow : Window
         return bitmap;
     }
 
+    // Updates the satisfaction label/slider art and breaks a locked perfect path when the value drops below 100%.
     private void SatisfactionSlider_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
         if (SatisfactionValueText is not null)
@@ -457,11 +624,83 @@ public partial class MainWindow : Window
         WakeSatisfactionPanel();
     }
 
+    // Keeps the custom slider fill and thumb aligned when the slider area resizes.
     private void SatisfactionSliderShell_SizeChanged(object? sender, SizeChangedEventArgs e)
     {
         UpdateSatisfactionSliderVisual();
     }
 
+    // Starts dragging satisfaction from anywhere inside the larger invisible slider reach area.
+    private void SatisfactionSliderShell_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        isDraggingSatisfaction = true;
+        e.Pointer.Capture(SatisfactionSliderShell);
+        SetSatisfactionFromPointer(e);
+        WakeSatisfactionPanel();
+        e.Handled = true;
+    }
+
+    // Updates satisfaction while dragging through the larger invisible slider reach area.
+    private void SatisfactionSliderShell_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!isDraggingSatisfaction)
+        {
+            return;
+        }
+
+        var pointerPoint = e.GetCurrentPoint(SatisfactionSliderShell);
+
+        if (!pointerPoint.Properties.IsLeftButtonPressed)
+        {
+            isDraggingSatisfaction = false;
+            e.Pointer.Capture(null);
+            return;
+        }
+
+        SetSatisfactionFromPointer(e);
+        WakeSatisfactionPanel();
+        e.Handled = true;
+    }
+
+    // Ends satisfaction dragging when the pointer is released.
+    private void SatisfactionSliderShell_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!isDraggingSatisfaction)
+        {
+            return;
+        }
+
+        SetSatisfactionFromPointer(e);
+        isDraggingSatisfaction = false;
+        e.Pointer.Capture(null);
+        WakeSatisfactionPanel();
+        e.Handled = true;
+    }
+
+    // Cancels satisfaction dragging if Avalonia gives pointer capture to something else.
+    private void SatisfactionSliderShell_PointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        isDraggingSatisfaction = false;
+    }
+
+    // Converts a pointer X position inside the slider shell into a satisfaction percentage.
+    private void SetSatisfactionFromPointer(PointerEventArgs e)
+    {
+        var width = SatisfactionSliderShell.Bounds.Width;
+
+        if (width <= 0)
+        {
+            return;
+        }
+
+        var position = e.GetPosition(SatisfactionSliderShell);
+        var progress = Math.Clamp(position.X / width, 0, 1);
+        var range = SatisfactionSlider.Maximum - SatisfactionSlider.Minimum;
+
+        SatisfactionSlider.Value = SatisfactionSlider.Minimum + (range * progress);
+    }
+
+    // Draws the custom slim satisfaction slider based on the real slider value.
     private void UpdateSatisfactionSliderVisual()
     {
         if (SatisfactionSliderShell is null || SatisfactionSliderFill is null || SatisfactionSliderThumb is null)
@@ -492,6 +731,7 @@ public partial class MainWindow : Window
         }
     }
 
+    // Starts dissolving the satisfaction panel after it has not been touched for two seconds.
     private void SatisfactionFadeTimer_Tick(object? sender, EventArgs e)
     {
         satisfactionFadeTimer.Stop();
@@ -504,31 +744,37 @@ public partial class MainWindow : Window
         AnimateSatisfactionPanelOpacity(0, TimeSpan.FromMilliseconds(650), hideWhenComplete: true);
     }
 
+    // Keeps the satisfaction panel visible while the pointer is over it.
     private void SatisfactionPanel_PointerEntered(object? sender, PointerEventArgs e)
     {
         WakeSatisfactionPanel();
     }
 
+    // Keeps the satisfaction panel visible while the pointer moves across it.
     private void SatisfactionPanel_PointerMoved(object? sender, PointerEventArgs e)
     {
         WakeSatisfactionPanel();
     }
 
+    // Keeps the satisfaction panel visible when the user presses inside it.
     private void SatisfactionPanel_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         WakeSatisfactionPanel();
     }
 
+    // Reveals the satisfaction panel when the pointer enters the invisible bottom zone.
     private void SatisfactionRevealZone_PointerEntered(object? sender, PointerEventArgs e)
     {
         WakeSatisfactionPanel();
     }
 
+    // Reveals the satisfaction panel when the pointer moves through the invisible bottom zone.
     private void SatisfactionRevealZone_PointerMoved(object? sender, PointerEventArgs e)
     {
         WakeSatisfactionPanel();
     }
 
+    // Toggles whether the satisfaction panel should stay on screen permanently.
     private void KeepSatisfactionVisibleToggle_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         UpdateKeepVisibleOption();
@@ -540,6 +786,7 @@ public partial class MainWindow : Window
         }
     }
 
+    // Updates the small option box so the dot/circle matches the toggle state.
     private void UpdateKeepVisibleOption()
     {
         var isChecked = KeepSatisfactionVisibleToggle.IsChecked == true;
@@ -550,6 +797,7 @@ public partial class MainWindow : Window
         OptionCircle.Stroke = new SolidColorBrush(isChecked ? Color.Parse("#070A0F") : Color.Parse("#9DABBB"));
     }
 
+    // Shows the satisfaction panel and restarts its auto-hide timer when needed.
     private void WakeSatisfactionPanel()
     {
         if (SatisfactionPanel is null)
@@ -571,6 +819,7 @@ public partial class MainWindow : Window
         satisfactionFadeTimer.Start();
     }
 
+    // Smoothly fades the satisfaction panel and fully hides it after the fade-out finishes.
     private async void AnimateSatisfactionPanelOpacity(double opacity, TimeSpan duration, bool hideWhenComplete)
     {
         satisfactionOpacityCancellation?.Cancel();
@@ -612,6 +861,7 @@ public partial class MainWindow : Window
         }
     }
 
+    // Repositions or clamps the logo when the bounce field changes size.
     private void BounceStage_SizeChanged(object? sender, SizeChangedEventArgs e)
     {
         if (!isBouncing)
@@ -623,6 +873,7 @@ public partial class MainWindow : Window
         ClampLogoPosition();
     }
 
+    // Creates the first movement direction using the fixed logo speed.
     private Vector CreateInitialVelocity()
     {
         var angle = (random.NextDouble() * 0.55) + 0.45;
@@ -633,6 +884,7 @@ public partial class MainWindow : Window
         return new Vector(Math.Cos(angle) * speed * directionX, Math.Sin(angle) * speed * directionY);
     }
 
+    // Decides whether the next bounce should aim perfectly or drift with a mistake.
     private void ApplySatisfactionBounce()
     {
         var target = GetTargetCorner();
@@ -646,6 +898,7 @@ public partial class MainWindow : Window
         ApplyTrajectoryMistake();
     }
 
+    // Converts the satisfaction slider percentage into a success/failure chance.
     private bool ShouldUsePerfectBounce()
     {
         var satisfaction = Math.Clamp(SatisfactionSlider.Value, 0, 100);
@@ -663,6 +916,7 @@ public partial class MainWindow : Window
         return random.NextDouble() < satisfaction / 100.0;
     }
 
+    // Points the logo directly at the chosen corner and remembers that target.
     private void AimAtTargetCorner(Point target)
     {
         var targetDirection = new Vector(target.X - logoX, target.Y - logoY);
@@ -676,6 +930,7 @@ public partial class MainWindow : Window
         currentCornerTarget = target;
     }
 
+    // Rotates the current path by a small random error so an imperfect bounce misses the corner.
     private void ApplyTrajectoryMistake()
     {
         if (velocity.Length <= 0)
@@ -700,6 +955,7 @@ public partial class MainWindow : Window
         currentCornerTarget = null;
     }
 
+    // Snaps the logo exactly to a perfect target corner when this frame reaches it.
     private bool TryReachTargetCorner(double nextX, double nextY, out Point targetCorner)
     {
         targetCorner = default;
@@ -723,6 +979,7 @@ public partial class MainWindow : Window
         return true;
     }
 
+    // Records a real corner hit and returns which corner was touched.
     private StageCorner? RecordCornerHit(double maxX, double maxY)
     {
         if (!IsLogoInCorner(maxX, maxY))
@@ -737,6 +994,7 @@ public partial class MainWindow : Window
         return corner;
     }
 
+    // Maintains a recent unique corner list so the app avoids repeating corners too soon.
     private void RememberCornerHit(StageCorner corner)
     {
         recentCornerHits.Remove(corner);
@@ -750,6 +1008,7 @@ public partial class MainWindow : Window
         }
     }
 
+    // Moves the logo slightly away from a corner so the same hit is not counted over and over.
     private void NudgeLogoAwayFromCorner(StageCorner corner, double maxX, double maxY)
     {
         const double inset = 2;
@@ -760,6 +1019,7 @@ public partial class MainWindow : Window
         Canvas.SetTop(DvdLogoImage, logoY);
     }
 
+    // Checks whether the logo is touching both a horizontal and vertical edge at the same time.
     private bool IsLogoInCorner(double maxX, double maxY)
     {
         const double tolerance = 0.5;
@@ -769,6 +1029,7 @@ public partial class MainWindow : Window
         return atHorizontalEdge && atVerticalEdge;
     }
 
+    // Keeps the logo inside the bounce field.
     private void ClampLogoPosition()
     {
         logoX = Math.Clamp(logoX, 0, GetMaxLogoX());
@@ -777,6 +1038,7 @@ public partial class MainWindow : Window
         Canvas.SetTop(DvdLogoImage, logoY);
     }
 
+    // Keeps the movement direction but changes its speed to the requested amount.
     private void SetVelocityMagnitude(double speed)
     {
         if (velocity.Length <= 0)
@@ -788,11 +1050,13 @@ public partial class MainWindow : Window
         velocity = velocity.Normalize() * speed;
     }
 
+    // Returns the fixed movement speed for the logo.
     private static double GetLogoSpeed()
     {
         return FixedLogoSpeed;
     }
 
+    // Chooses the next corner target while avoiding the last/recent corners where possible.
     private Point GetTargetCorner()
     {
         var corners = GetStageCorners();
@@ -846,6 +1110,7 @@ public partial class MainWindow : Window
         return GetBestCornerPosition(candidates, currentPosition);
     }
 
+    // Filters target corners to fresh corners first, or the oldest used corners if all are recent.
     private (StageCorner Corner, Point Position)[] GetRepeatSafeCorners(
         IEnumerable<(StageCorner Corner, Point Position)> corners)
     {
@@ -870,6 +1135,7 @@ public partial class MainWindow : Window
             .ToArray();
     }
 
+    // Returns the current canvas coordinates for all four possible target corners.
     private (StageCorner Corner, Point Position)[] GetStageCorners()
     {
         var maxX = GetMaxLogoX();
@@ -884,6 +1150,7 @@ public partial class MainWindow : Window
         ];
     }
 
+    // Works out which named corner the logo is closest to right now.
     private StageCorner GetCurrentCorner(double maxX, double maxY)
     {
         var isLeft = logoX <= maxX / 2;
@@ -898,6 +1165,7 @@ public partial class MainWindow : Window
         };
     }
 
+    // Picks the best target by freshness first and distance second.
     private Point GetBestCornerPosition(
         IEnumerable<(StageCorner Corner, Point Position)> corners,
         Point currentPosition)
@@ -913,6 +1181,7 @@ public partial class MainWindow : Window
             .Position;
     }
 
+    // Finds how recently a corner was hit; lower numbers are older.
     private int GetRecentCornerIndex(StageCorner corner)
     {
         var index = recentCornerHits.IndexOf(corner);
@@ -920,6 +1189,7 @@ public partial class MainWindow : Window
         return index < 0 ? int.MinValue : index;
     }
 
+    // Rotates a movement vector by a given number of degrees.
     private static Vector RotateByDegrees(Vector vector, double degrees)
     {
         var radians = degrees * Math.PI / 180.0;
@@ -931,11 +1201,13 @@ public partial class MainWindow : Window
             (vector.X * sin) + (vector.Y * cos));
     }
 
+    // Measures the straight-line distance between two points.
     private static double GetDistance(Point first, Point second)
     {
         return Math.Sqrt(GetDistanceSquared(first, second));
     }
 
+    // Measures distance without a square root for cheaper sorting/comparison.
     private static double GetDistanceSquared(Point first, Point second)
     {
         var deltaX = first.X - second.X;
@@ -944,31 +1216,37 @@ public partial class MainWindow : Window
         return (deltaX * deltaX) + (deltaY * deltaY);
     }
 
+    // Checks whether two corners share the same top/bottom side or left/right side.
     private static bool SharesSide(StageCorner first, StageCorner second)
     {
         return IsTop(first) == IsTop(second) || IsLeft(first) == IsLeft(second);
     }
 
+    // Returns whether a corner is on the top edge.
     private static bool IsTop(StageCorner corner)
     {
         return corner is StageCorner.TopLeft or StageCorner.TopRight;
     }
 
+    // Returns whether a corner is on the left edge.
     private static bool IsLeft(StageCorner corner)
     {
         return corner is StageCorner.TopLeft or StageCorner.BottomLeft;
     }
 
+    // Calculates the centered X position for the logo.
     private double GetCenteredLogoX()
     {
         return Math.Max(0, (BounceStage.Bounds.Width - DvdLogoImage.Width) / 2);
     }
 
+    // Calculates the centered Y position for the logo.
     private double GetCenteredLogoY()
     {
         return Math.Max(0, (BounceStage.Bounds.Height - DvdLogoImage.Height) / 2);
     }
 
+    // Calculates the lifted intro Y position above the exact center.
     private double GetIntroLogoY()
     {
         var centeredY = GetCenteredLogoY();
@@ -977,41 +1255,49 @@ public partial class MainWindow : Window
         return Math.Max(24, centeredY - lift);
     }
 
+    // Calculates the furthest right the logo can move without leaving the bounce field.
     private double GetMaxLogoX()
     {
         return Math.Max(0, BounceStage.Bounds.Width - DvdLogoImage.Width);
     }
 
+    // Calculates the lowest the logo can move without leaving the bounce field.
     private double GetMaxLogoY()
     {
         return Math.Max(0, BounceStage.Bounds.Height - DvdLogoImage.Height);
     }
 
+    // Falls back to a safe canvas value when Avalonia has not measured a position yet.
     private static double GetValidCanvasValue(double value, double fallback)
     {
         return double.IsNaN(value) || double.IsInfinity(value) ? fallback : value;
     }
 
+    // Builds the copied output path for an asset file.
     private static string GetOutputAssetPath(string fileName)
     {
         return Path.Combine(AppContext.BaseDirectory, "Assets", fileName);
     }
 
+    // Keeps a percentage-style number between 0 and 1.
     private static double Clamp01(double value)
     {
         return Math.Clamp(value, 0, 1);
     }
 
+    // Blends between two numbers by the given amount.
     private static double Lerp(double start, double end, double amount)
     {
         return start + ((end - start) * amount);
     }
 
+    // Gives fade animations a softer ending.
     private static double EaseOutQuad(double amount)
     {
         return 1 - Math.Pow(1 - amount, 2);
     }
 
+    // Gives movement animations a soft start and soft ending.
     private static double EaseInOutCubic(double amount)
     {
         return amount < 0.5
@@ -1020,11 +1306,13 @@ public partial class MainWindow : Window
     }
 }
 
+// Small NAudio wrapper that lets the app replay an MP3 sound from the beginning.
 internal sealed class AudioClip : IDisposable
 {
     private readonly AudioFileReader reader;
     private readonly WaveOut output;
 
+    // Loads one MP3 file and sets its playback volume.
     public AudioClip(string path, float volume)
     {
         reader = new AudioFileReader(path)
@@ -1035,6 +1323,7 @@ internal sealed class AudioClip : IDisposable
         output.Init(reader);
     }
 
+    // Restarts the sound from the beginning and plays it.
     public void PlayFromStart()
     {
         output.Stop();
@@ -1042,6 +1331,7 @@ internal sealed class AudioClip : IDisposable
         output.Play();
     }
 
+    // Releases the file reader and audio output device.
     public void Dispose()
     {
         output.Dispose();
@@ -1049,12 +1339,14 @@ internal sealed class AudioClip : IDisposable
     }
 }
 
+// Draws the CRT scanlines, colour stripes, vignette, highlight, and flicker layer.
 public sealed class CrtOverlayControl : Control
 {
     private readonly DispatcherTimer flickerTimer;
     private readonly Random random = new();
     private double flickerOpacity = 0.018;
 
+    // Sets up a timer that gently changes the flicker opacity.
     public CrtOverlayControl()
     {
         IsHitTestVisible = false;
@@ -1073,6 +1365,7 @@ public sealed class CrtOverlayControl : Control
         DetachedFromVisualTree += (_, _) => flickerTimer.Stop();
     }
 
+    // Paints the CRT overlay over the whole screen surface.
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -1116,6 +1409,7 @@ public sealed class CrtOverlayControl : Control
         context.DrawRectangle(flickerBrush, null, new Rect(0, 0, width, height));
     }
 
+    // Darkens the outside edges to imitate old CRT glass falloff.
     private static void DrawVignette(DrawingContext context, double width, double height)
     {
         for (var i = 0; i < 12; i++)

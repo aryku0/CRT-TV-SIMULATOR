@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\DVD_video_logo.png" />
+    <AvaloniaResource Include="Assets\fullscreen_icon.png" />
     <AvaloniaResource Include="Assets\Fonts\*.otf" />
     <None Update="Assets\*.mp3">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

@@ -49,6 +49,28 @@
             <Setter Property="BorderBrush" Value="#D8E1EC" />
         </Style>
 
+        <Style Selector="Button.screen-button">
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="44" />
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Background" Value="#EAF7FAFC" />
+            <Setter Property="BorderBrush" Value="#334156" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="22" />
+            <Setter Property="Foreground" Value="#F7FAFC" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style Selector="Button.screen-button:pointerover">
+            <Setter Property="Background" Value="#FFFFFFFF" />
+            <Setter Property="BorderBrush" Value="#5D6B80" />
+        </Style>
+
+        <Style Selector="Button.screen-button:pressed">
+            <Setter Property="Background" Value="#D8E1EC" />
+        </Style>
+
         <Style Selector="ToggleButton.option-toggle">
             <Setter Property="Width" Value="22" />
             <Setter Property="Height" Value="22" />
@@ -134,10 +156,15 @@
 
                             <Grid x:Name="SatisfactionSliderShell"
                                   Grid.Column="1"
-                                  Height="24"
+                                  Height="46"
                                   Margin="8,0,12,0"
+                                  Background="Transparent"
                                   VerticalAlignment="Center"
-                                  SizeChanged="SatisfactionSliderShell_SizeChanged">
+                                  SizeChanged="SatisfactionSliderShell_SizeChanged"
+                                  PointerPressed="SatisfactionSliderShell_PointerPressed"
+                                  PointerMoved="SatisfactionSliderShell_PointerMoved"
+                                  PointerReleased="SatisfactionSliderShell_PointerReleased"
+                                  PointerCaptureLost="SatisfactionSliderShell_PointerCaptureLost">
                                 <Border Height="5"
                                         VerticalAlignment="Center"
                                         Background="#263140"
@@ -162,12 +189,13 @@
                                         Maximum="100"
                                         Value="35"
                                         TickFrequency="5"
-                                        Height="24"
+                                        Height="46"
                                         Opacity="0.01"
                                         Background="Transparent"
                                         Foreground="Transparent"
                                         BorderBrush="Transparent"
                                         Focusable="False"
+                                        IsHitTestVisible="False"
                                         VerticalAlignment="Stretch"
                                         ValueChanged="SatisfactionSlider_ValueChanged" />
                             </Grid>
@@ -218,6 +246,31 @@
 
                 <local:CrtOverlayControl x:Name="CrtOverlay"
                                          IsHitTestVisible="False" />
+
+                <Border x:Name="FullscreenRevealZone"
+                        Width="96"
+                        Height="96"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Background="Transparent"
+                        PointerEntered="FullscreenRevealZone_PointerEntered"
+                        PointerMoved="FullscreenRevealZone_PointerMoved" />
+
+                <Button x:Name="FullscreenButton"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="0,18,18,0"
+                        Classes="screen-button"
+                        Cursor="Hand"
+                        ToolTip.Tip="Fullscreen"
+                        PointerEntered="FullscreenButton_PointerEntered"
+                        PointerMoved="FullscreenButton_PointerMoved"
+                        Click="FullscreenButton_Click">
+                    <Image Source="avares://DvdLogoApp/Assets/fullscreen_icon.png"
+                           Width="24"
+                           Height="24"
+                           Stretch="Uniform" />
+                </Button>
             </Grid>
         </Border>
     </Grid>
