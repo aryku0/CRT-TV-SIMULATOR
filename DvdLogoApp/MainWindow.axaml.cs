@@ -52,14 +52,12 @@ public partial class MainWindow : Window
 
     private readonly DispatcherTimer bounceTimer;
     private readonly DispatcherTimer satisfactionFadeTimer;
-    private readonly DispatcherTimer fullscreenFadeTimer;
     private readonly DispatcherTimer introTimer;
     private readonly Random random = new();
     private readonly List<AudioClip> bounceClips = new();
     private readonly List<StageCorner> recentCornerHits = [];
 
     private CancellationTokenSource? satisfactionOpacityCancellation;
-    private CancellationTokenSource? fullscreenOpacityCancellation;
     private AudioClip? introClip;
     private Bitmap? logoTemplate;
     private Vector velocity = new(280, 190);
@@ -73,6 +71,8 @@ public partial class MainWindow : Window
     private double logoX;
     private double logoY;
     private bool isDraggingSatisfaction;
+    private bool isDraggingGlassFresnel;
+    private bool isDraggingCornerRadius;
     private bool isBouncing;
 
     // Sets up the window, timers, and starting visual state.
@@ -83,7 +83,14 @@ public partial class MainWindow : Window
         ScreenSurface.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
         ScreenSurface.RenderTransform = new ScaleTransform(1.018, 1.012);
         SatisfactionSliderThumb.RenderTransform = new TranslateTransform();
+        GlassFresnelSliderThumb.RenderTransform = new TranslateTransform();
+        CornerRadiusSliderThumb.RenderTransform = new TranslateTransform();
         UpdateSatisfactionSliderVisual();
+        UpdateGlassFresnelSliderVisual();
+        UpdateCornerRadiusSliderVisual();
+        UpdateCrtEffectValueTexts();
+        UpdateCrtEffectSettings();
+        UpdateScreenCornerRadius();
         UpdateKeepVisibleOption();
 
         satisfactionFadeTimer = new DispatcherTimer
@@ -91,12 +98,6 @@ public partial class MainWindow : Window
             Interval = TimeSpan.FromSeconds(2)
         };
         satisfactionFadeTimer.Tick += SatisfactionFadeTimer_Tick;
-
-        fullscreenFadeTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(2)
-        };
-        fullscreenFadeTimer.Tick += FullscreenFadeTimer_Tick;
 
         introTimer = new DispatcherTimer
         {
@@ -123,7 +124,7 @@ public partial class MainWindow : Window
         PositionLogoForIntro();
         PlayIntroSound();
         BeginIntroAnimation();
-        WakeFullscreenButton();
+        UpdateFullscreenButtonText();
     }
 
     // Stops timers and releases audio/image resources when the window closes.
@@ -132,9 +133,7 @@ public partial class MainWindow : Window
         introTimer.Stop();
         bounceTimer.Stop();
         satisfactionFadeTimer.Stop();
-        fullscreenFadeTimer.Stop();
         satisfactionOpacityCancellation?.Cancel();
-        fullscreenOpacityCancellation?.Cancel();
         introClip?.Dispose();
         CloseBounceClips();
         logoTemplate?.Dispose();
@@ -194,6 +193,8 @@ public partial class MainWindow : Window
         Canvas.SetLeft(DvdLogoImage, GetCenteredLogoX());
         Canvas.SetTop(DvdLogoImage, introStartY);
         DvdLogoImage.Opacity = 0;
+        ControlsPanel.IsVisible = true;
+        ControlsPanel.IsHitTestVisible = false;
         ControlsPanel.Opacity = 0;
 
         introStartTime = DateTime.UtcNow;
@@ -227,6 +228,7 @@ public partial class MainWindow : Window
 
         introTimer.Stop();
         DvdLogoImage.Opacity = 1;
+        ControlsPanel.IsHitTestVisible = true;
         ControlsPanel.Opacity = 1;
         logoX = Canvas.GetLeft(DvdLogoImage);
         logoY = introFinalY;
@@ -252,32 +254,21 @@ public partial class MainWindow : Window
     // Switches between the normal window and fullscreen when the fullscreen button is clicked.
     private void FullscreenButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        WakeFullscreenButton();
         ToggleFullscreen();
+        WakeSatisfactionPanel();
     }
 
-    // Keeps the fullscreen icon visible while the pointer is over it.
-    private void FullscreenButton_PointerEntered(object? sender, PointerEventArgs e)
+    // Opens or closes the right-side option drawer.
+    private void OptionsButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        WakeFullscreenButton();
-    }
+        if (ControlsPanel.IsVisible && ControlsPanel.Opacity > 0.5)
+        {
+            satisfactionFadeTimer.Stop();
+            AnimateSatisfactionPanelOpacity(0, TimeSpan.FromMilliseconds(180), hideWhenComplete: true);
+            return;
+        }
 
-    // Keeps the fullscreen icon visible while the pointer moves across it.
-    private void FullscreenButton_PointerMoved(object? sender, PointerEventArgs e)
-    {
-        WakeFullscreenButton();
-    }
-
-    // Reveals the fullscreen icon when the pointer enters the invisible top-right zone.
-    private void FullscreenRevealZone_PointerEntered(object? sender, PointerEventArgs e)
-    {
-        WakeFullscreenButton();
-    }
-
-    // Reveals the fullscreen icon when the pointer moves through the invisible top-right zone.
-    private void FullscreenRevealZone_PointerMoved(object? sender, PointerEventArgs e)
-    {
-        WakeFullscreenButton();
+        WakeSatisfactionPanel();
     }
 
     // Lets Escape leave fullscreen without closing the app.
@@ -320,71 +311,6 @@ public partial class MainWindow : Window
             WindowState == WindowState.FullScreen ? "Exit fullscreen" : "Fullscreen");
     }
 
-    // Starts dissolving the fullscreen icon after it has not been touched for two seconds.
-    private void FullscreenFadeTimer_Tick(object? sender, EventArgs e)
-    {
-        fullscreenFadeTimer.Stop();
-        AnimateFullscreenButtonOpacity(0, TimeSpan.FromMilliseconds(650), hideWhenComplete: true);
-    }
-
-    // Shows the fullscreen icon and restarts its auto-hide timer.
-    private void WakeFullscreenButton()
-    {
-        if (FullscreenButton is null)
-        {
-            return;
-        }
-
-        FullscreenButton.IsVisible = true;
-        FullscreenButton.IsHitTestVisible = true;
-        AnimateFullscreenButtonOpacity(1, TimeSpan.FromMilliseconds(180), hideWhenComplete: false);
-
-        fullscreenFadeTimer.Stop();
-        fullscreenFadeTimer.Start();
-    }
-
-    // Smoothly fades the fullscreen icon and fully hides it after the fade-out finishes.
-    private async void AnimateFullscreenButtonOpacity(double opacity, TimeSpan duration, bool hideWhenComplete)
-    {
-        fullscreenOpacityCancellation?.Cancel();
-        var cancellation = new CancellationTokenSource();
-        fullscreenOpacityCancellation = cancellation;
-
-        var startOpacity = FullscreenButton.Opacity;
-        var startTime = DateTime.UtcNow;
-
-        try
-        {
-            while (true)
-            {
-                cancellation.Token.ThrowIfCancellationRequested();
-
-                var elapsed = DateTime.UtcNow - startTime;
-                var progress = Clamp01(elapsed.TotalMilliseconds / duration.TotalMilliseconds);
-                FullscreenButton.Opacity = Lerp(startOpacity, opacity, EaseOutQuad(progress));
-
-                if (progress >= 1)
-                {
-                    break;
-                }
-
-                await Task.Delay(16, cancellation.Token);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-
-        FullscreenButton.Opacity = opacity;
-
-        if (hideWhenComplete)
-        {
-            FullscreenButton.IsHitTestVisible = false;
-            FullscreenButton.IsVisible = false;
-        }
-    }
-
     // Switches from the intro screen into the live bouncing logo simulation.
     private void StartBouncing()
     {
@@ -405,7 +331,8 @@ public partial class MainWindow : Window
         ApplySatisfactionBounce();
 
         isBouncing = true;
-        StartButton.IsVisible = false;
+        StartButton.Content = "Running";
+        StartButton.IsEnabled = false;
         lastFrameTime = DateTime.UtcNow;
         bounceTimer.Start();
     }
@@ -686,18 +613,7 @@ public partial class MainWindow : Window
     // Converts a pointer X position inside the slider shell into a satisfaction percentage.
     private void SetSatisfactionFromPointer(PointerEventArgs e)
     {
-        var width = SatisfactionSliderShell.Bounds.Width;
-
-        if (width <= 0)
-        {
-            return;
-        }
-
-        var position = e.GetPosition(SatisfactionSliderShell);
-        var progress = Math.Clamp(position.X / width, 0, 1);
-        var range = SatisfactionSlider.Maximum - SatisfactionSlider.Minimum;
-
-        SatisfactionSlider.Value = SatisfactionSlider.Minimum + (range * progress);
+        SetSliderFromPointer(e, SatisfactionSliderShell, SatisfactionSlider);
     }
 
     // Draws the custom slim satisfaction slider based on the real slider value.
@@ -708,11 +624,287 @@ public partial class MainWindow : Window
             return;
         }
 
-        var sliderRange = SatisfactionSlider.Maximum - SatisfactionSlider.Minimum;
+        UpdateSliderVisual(SatisfactionSliderShell, SatisfactionSliderFill, SatisfactionSliderThumb, SatisfactionSlider);
+    }
+
+    // Updates the Fresnel value and redraws the glass overlay.
+    private void GlassFresnelSlider_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (GlassFresnelValueText is not null)
+        {
+            GlassFresnelValueText.Text = $"{Math.Round(e.NewValue)}%";
+        }
+
+        UpdateGlassFresnelSliderVisual();
+        UpdateCrtGlassFresnel();
+        WakeSatisfactionPanel();
+    }
+
+    // Keeps the custom Fresnel slider aligned when its area resizes.
+    private void GlassFresnelSliderShell_SizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        UpdateGlassFresnelSliderVisual();
+    }
+
+    // Starts dragging the Fresnel slider.
+    private void GlassFresnelSliderShell_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        isDraggingGlassFresnel = true;
+        e.Pointer.Capture(GlassFresnelSliderShell);
+        SetGlassFresnelFromPointer(e);
+        WakeSatisfactionPanel();
+        e.Handled = true;
+    }
+
+    // Updates the Fresnel value while dragging.
+    private void GlassFresnelSliderShell_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!isDraggingGlassFresnel)
+        {
+            return;
+        }
+
+        var pointerPoint = e.GetCurrentPoint(GlassFresnelSliderShell);
+
+        if (!pointerPoint.Properties.IsLeftButtonPressed)
+        {
+            isDraggingGlassFresnel = false;
+            e.Pointer.Capture(null);
+            return;
+        }
+
+        SetGlassFresnelFromPointer(e);
+        WakeSatisfactionPanel();
+        e.Handled = true;
+    }
+
+    // Ends Fresnel dragging when the pointer is released.
+    private void GlassFresnelSliderShell_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!isDraggingGlassFresnel)
+        {
+            return;
+        }
+
+        SetGlassFresnelFromPointer(e);
+        isDraggingGlassFresnel = false;
+        e.Pointer.Capture(null);
+        WakeSatisfactionPanel();
+        e.Handled = true;
+    }
+
+    // Cancels Fresnel dragging if pointer capture moves.
+    private void GlassFresnelSliderShell_PointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        isDraggingGlassFresnel = false;
+    }
+
+    // Converts a pointer X position into a Fresnel percentage.
+    private void SetGlassFresnelFromPointer(PointerEventArgs e)
+    {
+        SetSliderFromPointer(e, GlassFresnelSliderShell, GlassFresnelSlider);
+    }
+
+    // Draws the custom slim Fresnel slider based on the real slider value.
+    private void UpdateGlassFresnelSliderVisual()
+    {
+        if (GlassFresnelSliderShell is null || GlassFresnelSliderFill is null || GlassFresnelSliderThumb is null)
+        {
+            return;
+        }
+
+        UpdateSliderVisual(GlassFresnelSliderShell, GlassFresnelSliderFill, GlassFresnelSliderThumb, GlassFresnelSlider);
+    }
+
+    // Updates CRT slider labels and redraws the separate CRT simulation.
+    private void CrtEffectSlider_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        UpdateCrtEffectValueTexts();
+        UpdateCrtEffectSettings();
+        WakeSatisfactionPanel();
+    }
+
+    // Sends all TV effect settings to the separate CRT overlay.
+    private void UpdateCrtEffectSettings()
+    {
+        if (CrtOverlay is null
+            || CrtCurveSlider is null
+            || CrtScanlineSlider is null
+            || CrtNoiseSlider is null
+            || CrtGlitchSlider is null
+            || CrtVignetteSlider is null
+            || GlassFresnelSlider is null)
+        {
+            return;
+        }
+
+        CrtOverlay.CurveStrength = GetPercentValue(CrtCurveSlider);
+        CrtOverlay.ScanlineStrength = GetPercentValue(CrtScanlineSlider);
+        CrtOverlay.NoiseStrength = GetPercentValue(CrtNoiseSlider);
+        CrtOverlay.GlitchStrength = GetPercentValue(CrtGlitchSlider);
+        CrtOverlay.VignetteStrength = GetPercentValue(CrtVignetteSlider);
+        CrtOverlay.FresnelStrength = GetPercentValue(GlassFresnelSlider);
+    }
+
+    // Keeps all CRT labels in sync with their sliders.
+    private void UpdateCrtEffectValueTexts()
+    {
+        SetPercentText(CrtCurveValueText, CrtCurveSlider);
+        SetPercentText(CrtScanlineValueText, CrtScanlineSlider);
+        SetPercentText(CrtNoiseValueText, CrtNoiseSlider);
+        SetPercentText(CrtGlitchValueText, CrtGlitchSlider);
+        SetPercentText(CrtVignetteValueText, CrtVignetteSlider);
+    }
+
+    private static double GetPercentValue(Slider slider)
+    {
+        return Math.Clamp(slider.Value / 100.0, 0, 1);
+    }
+
+    private static void SetPercentText(TextBlock? text, Slider? slider)
+    {
+        if (text is null || slider is null)
+        {
+            return;
+        }
+
+        text.Text = $"{Math.Round(slider.Value)}%";
+    }
+
+    // Compatibility path for the custom Fresnel slider.
+    private void UpdateCrtGlassFresnel()
+    {
+        UpdateCrtEffectSettings();
+    }
+
+    // Updates the corner value and redraws the screen frame.
+    private void CornerRadiusSlider_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (CornerRadiusValueText is not null)
+        {
+            CornerRadiusValueText.Text = $"{Math.Round(e.NewValue)}px";
+        }
+
+        UpdateCornerRadiusSliderVisual();
+        UpdateScreenCornerRadius();
+        WakeSatisfactionPanel();
+    }
+
+    // Keeps the custom corner slider aligned when its area resizes.
+    private void CornerRadiusSliderShell_SizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        UpdateCornerRadiusSliderVisual();
+    }
+
+    // Starts dragging the corner radius slider.
+    private void CornerRadiusSliderShell_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        isDraggingCornerRadius = true;
+        e.Pointer.Capture(CornerRadiusSliderShell);
+        SetCornerRadiusFromPointer(e);
+        WakeSatisfactionPanel();
+        e.Handled = true;
+    }
+
+    // Updates the corner radius while dragging.
+    private void CornerRadiusSliderShell_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!isDraggingCornerRadius)
+        {
+            return;
+        }
+
+        var pointerPoint = e.GetCurrentPoint(CornerRadiusSliderShell);
+
+        if (!pointerPoint.Properties.IsLeftButtonPressed)
+        {
+            isDraggingCornerRadius = false;
+            e.Pointer.Capture(null);
+            return;
+        }
+
+        SetCornerRadiusFromPointer(e);
+        WakeSatisfactionPanel();
+        e.Handled = true;
+    }
+
+    // Ends corner radius dragging when the pointer is released.
+    private void CornerRadiusSliderShell_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!isDraggingCornerRadius)
+        {
+            return;
+        }
+
+        SetCornerRadiusFromPointer(e);
+        isDraggingCornerRadius = false;
+        e.Pointer.Capture(null);
+        WakeSatisfactionPanel();
+        e.Handled = true;
+    }
+
+    // Cancels corner radius dragging if pointer capture moves.
+    private void CornerRadiusSliderShell_PointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        isDraggingCornerRadius = false;
+    }
+
+    // Converts a pointer X position into a corner radius value.
+    private void SetCornerRadiusFromPointer(PointerEventArgs e)
+    {
+        SetSliderFromPointer(e, CornerRadiusSliderShell, CornerRadiusSlider);
+    }
+
+    // Draws the custom slim corner radius slider based on the real slider value.
+    private void UpdateCornerRadiusSliderVisual()
+    {
+        if (CornerRadiusSliderShell is null || CornerRadiusSliderFill is null || CornerRadiusSliderThumb is null)
+        {
+            return;
+        }
+
+        UpdateSliderVisual(CornerRadiusSliderShell, CornerRadiusSliderFill, CornerRadiusSliderThumb, CornerRadiusSlider);
+    }
+
+    // Applies one radius to the light bezel, glass, and corner-depth pass.
+    private void UpdateScreenCornerRadius()
+    {
+        if (ScreenBezel is null || ScreenClip is null || CornerDepthOverlay is null)
+        {
+            return;
+        }
+
+        var radius = Math.Clamp(CornerRadiusSlider.Value, CornerRadiusSlider.Minimum, CornerRadiusSlider.Maximum);
+        ScreenBezel.CornerRadius = new CornerRadius(radius);
+        ScreenClip.CornerRadius = new CornerRadius(Math.Max(0, radius - 2));
+        CornerDepthOverlay.CornerRadius = radius;
+    }
+
+    // Converts a pointer X position inside a slider shell into that slider's value.
+    private static void SetSliderFromPointer(PointerEventArgs e, Control sliderShell, Slider slider)
+    {
+        var width = sliderShell.Bounds.Width;
+
+        if (width <= 0)
+        {
+            return;
+        }
+
+        var position = e.GetPosition(sliderShell);
+        var progress = Math.Clamp(position.X / width, 0, 1);
+        var range = slider.Maximum - slider.Minimum;
+
+        slider.Value = slider.Minimum + (range * progress);
+    }
+
+    // Draws one of the custom slim sliders.
+    private static void UpdateSliderVisual(Control sliderShell, Border sliderFill, Control sliderThumb, Slider slider)
+    {
+        var sliderRange = slider.Maximum - slider.Minimum;
         var progress = sliderRange <= 0
             ? 0
-            : (SatisfactionSlider.Value - SatisfactionSlider.Minimum) / sliderRange;
-        var width = SatisfactionSliderShell.Bounds.Width;
+            : (slider.Value - slider.Minimum) / sliderRange;
+        var width = sliderShell.Bounds.Width;
 
         if (width <= 0)
         {
@@ -720,12 +912,12 @@ public partial class MainWindow : Window
         }
 
         progress = Math.Clamp(progress, 0, 1);
-        SatisfactionSliderFill.Width = width * progress;
+        sliderFill.Width = width * progress;
 
-        var thumbWidth = SatisfactionSliderThumb.Width > 0 ? SatisfactionSliderThumb.Width : 20;
+        var thumbWidth = sliderThumb.Width > 0 ? sliderThumb.Width : 18;
         var thumbTravel = Math.Max(0, width - thumbWidth);
 
-        if (SatisfactionSliderThumb.RenderTransform is TranslateTransform thumbTransform)
+        if (sliderThumb.RenderTransform is TranslateTransform thumbTransform)
         {
             thumbTransform.X = thumbTravel * progress;
         }
@@ -736,7 +928,7 @@ public partial class MainWindow : Window
     {
         satisfactionFadeTimer.Stop();
 
-        if (KeepSatisfactionVisibleToggle.IsChecked == true)
+        if (KeepSatisfactionVisibleToggle.IsChecked == true || !isBouncing)
         {
             return;
         }
@@ -762,18 +954,6 @@ public partial class MainWindow : Window
         WakeSatisfactionPanel();
     }
 
-    // Reveals the satisfaction panel when the pointer enters the invisible bottom zone.
-    private void SatisfactionRevealZone_PointerEntered(object? sender, PointerEventArgs e)
-    {
-        WakeSatisfactionPanel();
-    }
-
-    // Reveals the satisfaction panel when the pointer moves through the invisible bottom zone.
-    private void SatisfactionRevealZone_PointerMoved(object? sender, PointerEventArgs e)
-    {
-        WakeSatisfactionPanel();
-    }
-
     // Toggles whether the satisfaction panel should stay on screen permanently.
     private void KeepSatisfactionVisibleToggle_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
@@ -786,27 +966,26 @@ public partial class MainWindow : Window
         }
     }
 
-    // Updates the small option box so the dot/circle matches the toggle state.
+    // Updates the small option box so the mark matches the toggle state.
     private void UpdateKeepVisibleOption()
     {
         var isChecked = KeepSatisfactionVisibleToggle.IsChecked == true;
 
-        OptionDot.IsVisible = isChecked;
+        OptionMark.IsVisible = isChecked;
         OptionBox.Background = new SolidColorBrush(isChecked ? Color.Parse("#F7FAFC") : Color.Parse("#263140"));
         OptionBox.BorderBrush = new SolidColorBrush(isChecked ? Color.Parse("#F7FAFC") : Color.Parse("#4B5A6D"));
-        OptionCircle.Stroke = new SolidColorBrush(isChecked ? Color.Parse("#070A0F") : Color.Parse("#9DABBB"));
     }
 
-    // Shows the satisfaction panel and restarts its auto-hide timer when needed.
+    // Shows the option drawer and restarts its auto-hide timer when needed.
     private void WakeSatisfactionPanel()
     {
-        if (SatisfactionPanel is null)
+        if (ControlsPanel is null)
         {
             return;
         }
 
-        SatisfactionPanel.IsVisible = true;
-        SatisfactionPanel.IsHitTestVisible = true;
+        ControlsPanel.IsVisible = true;
+        ControlsPanel.IsHitTestVisible = true;
         AnimateSatisfactionPanelOpacity(1, TimeSpan.FromMilliseconds(180), hideWhenComplete: false);
 
         if (KeepSatisfactionVisibleToggle?.IsChecked == true)
@@ -819,14 +998,14 @@ public partial class MainWindow : Window
         satisfactionFadeTimer.Start();
     }
 
-    // Smoothly fades the satisfaction panel and fully hides it after the fade-out finishes.
+    // Smoothly fades the option drawer and fully hides it after the fade-out finishes.
     private async void AnimateSatisfactionPanelOpacity(double opacity, TimeSpan duration, bool hideWhenComplete)
     {
         satisfactionOpacityCancellation?.Cancel();
         var cancellation = new CancellationTokenSource();
         satisfactionOpacityCancellation = cancellation;
 
-        var startOpacity = SatisfactionPanel.Opacity;
+        var startOpacity = ControlsPanel.Opacity;
         var startTime = DateTime.UtcNow;
 
         try
@@ -837,7 +1016,7 @@ public partial class MainWindow : Window
 
                 var elapsed = DateTime.UtcNow - startTime;
                 var progress = Clamp01(elapsed.TotalMilliseconds / duration.TotalMilliseconds);
-                SatisfactionPanel.Opacity = Lerp(startOpacity, opacity, EaseOutQuad(progress));
+                ControlsPanel.Opacity = Lerp(startOpacity, opacity, EaseOutQuad(progress));
 
                 if (progress >= 1)
                 {
@@ -852,12 +1031,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        SatisfactionPanel.Opacity = opacity;
+        ControlsPanel.Opacity = opacity;
 
         if (hideWhenComplete)
         {
-            SatisfactionPanel.IsHitTestVisible = false;
-            SatisfactionPanel.IsVisible = false;
+            ControlsPanel.IsHitTestVisible = false;
+            ControlsPanel.IsVisible = false;
         }
     }
 
@@ -1339,33 +1518,28 @@ internal sealed class AudioClip : IDisposable
     }
 }
 
-// Draws the CRT scanlines, colour stripes, vignette, highlight, and flicker layer.
-public sealed class CrtOverlayControl : Control
+// Draws raised and inset light on the screen corners.
+public sealed class BezelCornerDepthControl : Control
 {
-    private readonly DispatcherTimer flickerTimer;
-    private readonly Random random = new();
-    private double flickerOpacity = 0.018;
+    public static readonly StyledProperty<double> CornerRadiusProperty =
+        AvaloniaProperty.Register<BezelCornerDepthControl, double>(nameof(CornerRadius), 10.4);
 
-    // Sets up a timer that gently changes the flicker opacity.
-    public CrtOverlayControl()
+    public double CornerRadius
     {
-        IsHitTestVisible = false;
-
-        flickerTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(90)
-        };
-        flickerTimer.Tick += (_, _) =>
-        {
-            flickerOpacity = 0.012 + (random.NextDouble() * 0.028);
-            InvalidateVisual();
-        };
-
-        AttachedToVisualTree += (_, _) => flickerTimer.Start();
-        DetachedFromVisualTree += (_, _) => flickerTimer.Stop();
+        get => GetValue(CornerRadiusProperty);
+        set => SetValue(CornerRadiusProperty, value);
     }
 
-    // Paints the CRT overlay over the whole screen surface.
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == CornerRadiusProperty)
+        {
+            InvalidateVisual();
+        }
+    }
+
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -1378,50 +1552,53 @@ public sealed class CrtOverlayControl : Control
             return;
         }
 
-        var scanlineBrush = new SolidColorBrush(Color.FromArgb(34, 0, 0, 0));
-        var scanlineGlowBrush = new SolidColorBrush(Color.FromArgb(14, 255, 255, 255));
-        var redBrush = new SolidColorBrush(Color.FromArgb(14, 255, 47, 47));
-        var greenBrush = new SolidColorBrush(Color.FromArgb(14, 81, 255, 107));
-        var blueBrush = new SolidColorBrush(Color.FromArgb(14, 77, 139, 255));
+        var radius = Math.Clamp(CornerRadius, 0, Math.Min(width, height) / 2);
+        var outerLine = new Rect(2, 2, Math.Max(0, width - 4), Math.Max(0, height - 4));
+        var innerShadow = new Rect(10, 10, Math.Max(0, width - 20), Math.Max(0, height - 20));
+        var outerLightPen = new Pen(new SolidColorBrush(Color.FromArgb(230, 188, 238, 255)), 2);
+        var softLightPen = new Pen(new SolidColorBrush(Color.FromArgb(88, 237, 252, 255)), 1);
+        var shadowPen = new Pen(new SolidColorBrush(Color.FromArgb(180, 0, 0, 0)), 2);
 
-        for (var y = 0.0; y < height; y += 5)
-        {
-            context.DrawRectangle(scanlineBrush, null, new Rect(0, y, width, 1));
-            context.DrawRectangle(scanlineGlowBrush, null, new Rect(0, y + 3, width, 1));
-        }
-
-        for (var x = 0.0; x < width; x += 6)
-        {
-            context.DrawRectangle(redBrush, null, new Rect(x, 0, 1, height));
-            context.DrawRectangle(greenBrush, null, new Rect(x + 2, 0, 1, height));
-            context.DrawRectangle(blueBrush, null, new Rect(x + 4, 0, 1, height));
-        }
-
-        DrawVignette(context, width, height);
-
-        var highlightBrush = new SolidColorBrush(Color.FromArgb(28, 255, 255, 255));
-        context.DrawEllipse(highlightBrush, null, new Point(width * 0.5, height * 0.38), width * 0.34, height * 0.22);
-
-        var edgePen = new Pen(new SolidColorBrush(Color.FromArgb(50, 219, 244, 255)), 2);
-        context.DrawRectangle(null, edgePen, new Rect(10, 10, Math.Max(0, width - 20), Math.Max(0, height - 20)), 52, 42);
-
-        var flickerBrush = new SolidColorBrush(Color.FromArgb((byte)Math.Round(flickerOpacity * 255), 255, 255, 255));
-        context.DrawRectangle(flickerBrush, null, new Rect(0, 0, width, height));
+        context.DrawRectangle(null, shadowPen, innerShadow, Math.Max(0, radius - 7), Math.Max(0, radius - 7));
+        context.DrawRectangle(null, softLightPen, new Rect(1, 1, Math.Max(0, width - 2), Math.Max(0, height - 2)), radius + 1, radius + 1);
+        context.DrawRectangle(null, outerLightPen, outerLine, radius, radius);
     }
+}
 
-    // Darkens the outside edges to imitate old CRT glass falloff.
-    private static void DrawVignette(DrawingContext context, double width, double height)
+// Draws the small holes in the grey plastic speaker areas.
+public sealed class SpeakerGrilleControl : Control
+{
+    public override void Render(DrawingContext context)
     {
-        for (var i = 0; i < 12; i++)
-        {
-            var inset = i * 10.0;
-            var alpha = (byte)Math.Max(0, 58 - (i * 4));
-            var brush = new SolidColorBrush(Color.FromArgb(alpha, 0, 0, 0));
+        base.Render(context);
 
-            context.DrawRectangle(brush, null, new Rect(0, inset, Math.Min(14, width), Math.Max(0, height - (inset * 2))));
-            context.DrawRectangle(brush, null, new Rect(Math.Max(0, width - 14), inset, Math.Min(14, width), Math.Max(0, height - (inset * 2))));
-            context.DrawRectangle(brush, null, new Rect(inset, 0, Math.Max(0, width - (inset * 2)), Math.Min(14, height)));
-            context.DrawRectangle(brush, null, new Rect(inset, Math.Max(0, height - 14), Math.Max(0, width - (inset * 2)), Math.Min(14, height)));
+        var width = Bounds.Width;
+        var height = Bounds.Height;
+
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        var panelBrush = new SolidColorBrush(Color.FromArgb(42, 255, 255, 255));
+        var holeBrush = new SolidColorBrush(Color.FromArgb(180, 9, 12, 14));
+        var sheenPen = new Pen(new SolidColorBrush(Color.FromArgb(42, 255, 255, 255)), 1);
+        var bounds = new Rect(0.5, 0.5, Math.Max(0, width - 1), Math.Max(0, height - 1));
+
+        context.DrawRectangle(panelBrush, null, bounds, 5, 5);
+        context.DrawLine(sheenPen, bounds.TopLeft + new Vector(8, 4), bounds.TopRight - new Vector(8, -4));
+
+        const double spacing = 8;
+        const double radius = 2;
+
+        for (var y = 9.0; y <= height - 9; y += spacing)
+        {
+            var offset = ((int)(y / spacing) % 2) * 3.5;
+
+            for (var x = 9.0 + offset; x <= width - 9; x += spacing)
+            {
+                context.DrawEllipse(holeBrush, null, new Point(x, y), radius, radius);
+            }
         }
     }
 }
