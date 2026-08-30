@@ -1,4 +1,4 @@
-# DVD Logo Satisfaction
+# DVD Logo "Satisfaction"
 
 DVD Logo Satisfaction is a small Windows desktop app built with C#, .NET 10, and Avalonia UI. The project recreates the classic bouncing DVD logo screen saver with added interactive controls, sound effects, custom styling, and CRT-inspired visuals.
 
