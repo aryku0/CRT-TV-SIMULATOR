@@ -29,13 +29,14 @@ The built-in DVD screensaver includes a satisfaction slider that changes how oft
 
 ## Technologies Used
 
-- **C#** for the main application logic.
-- **.NET 10** as the application framework.
-- **Avalonia UI** for the desktop interface.
-- **Ab4d.SharpEngine** for rendering the interactive 3D CRT television.
-- **Ab4d.SharpEngine.glTF** for importing the retro TV model.
-- **NAudio** for playing MP3 sound effects.
-- **AXAML** for the app layout.
+- **C#** for the application logic, animation, input handling, and screen rendering.
+- **.NET 10** for the Windows desktop application.
+- **Avalonia UI 12.1.1** for the desktop window, controls, layout, and styling.
+- **Ab4d.SharpEngine 4.0.9594** for rendering the interactive 3D CRT television.
+- **Ab4d.SharpEngine.glTF 4.0.9594** for importing the retro TV model.
+- **NAudio 3.0.1** for playing the bundled MP3 bounce sounds.
+- **SkiaSharp bitmap support** through the SharpEngine/Avalonia rendering stack.
+- **AXAML** for the Avalonia interface layout.
 - **Git and GitHub** for version control and sharing the project.
 
 ## User Interface Features
@@ -43,7 +44,7 @@ The built-in DVD screensaver includes a satisfaction slider that changes how oft
 The app includes a clean retro-inspired interface with:
 
 - A CRT television display with a DVD logo no-signal screen.
-- Support for routing future image, video, camera, or captured-screen input to the TV display.
+- A screen pipeline being developed to accept image, video, camera, or captured-screen input.
 - A custom Start button.
 - A satisfaction slider.
 - A fullscreen icon button.
@@ -80,7 +81,7 @@ The font license is included here:
 
 ## 3D Model Credit
 
-The optional 3D TV preview uses "Retro 90's TV" by HiddenGhillieDhu from Sketchfab, licensed under CC-BY-4.0.
+The 3D TV model uses "Retro 90's TV" by HiddenGhillieDhu from Sketchfab, licensed under CC-BY-4.0.
 
 Source: `https://sketchfab.com/3d-models/retro-90s-tv-d1a52fcfd95d4901af3b6ae1359cc242`
 
