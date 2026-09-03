@@ -32,6 +32,8 @@ The built-in DVD screensaver includes a satisfaction slider that changes how oft
 - **C#** for the main application logic.
 - **.NET 10** as the application framework.
 - **Avalonia UI** for the desktop interface.
+- **Ab4d.SharpEngine** for rendering the interactive 3D CRT television.
+- **Ab4d.SharpEngine.glTF** for importing the retro TV model.
 - **NAudio** for playing MP3 sound effects.
 - **AXAML** for the app layout.
 - **Git and GitHub** for version control and sharing the project.
