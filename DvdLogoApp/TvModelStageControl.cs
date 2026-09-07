@@ -271,7 +271,7 @@ public sealed class TvModelStageControl : Grid
 
             scene.Update(true);
             sceneView.RenderScene(forceUpdate: true, forceRender: true);
-            statusText.Text = "Live DVD screen on 3D TV";
+            statusText.Text = "Made by Oleksandr Aryku";
             UploadPendingScreenTexture();
         }
         catch (Exception exception)
