@@ -9,11 +9,15 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using NAudio.Wave;
+using YoutubeExplode;
+using YoutubeExplode.Videos.Streams;
 
 namespace DvdLogoApp;
 
@@ -23,6 +27,9 @@ public partial class MainWindow : Window
     private const string IntroSoundFileName = "edr-old-pc-monitor-switch-on-and-degaussing-8576.mp3";
     private const double FixedLogoSpeed = 262;
     private const int CornerRepeatWindow = 5;
+    // Keeps the original DVD screensaver mode active until it is deliberately
+    // disabled again for a future input-focused build.
+    private static readonly bool EnableDvdScreensaver = true;
 
     private enum StageCorner
     {
@@ -52,28 +59,43 @@ public partial class MainWindow : Window
 
     private readonly DispatcherTimer bounceTimer;
     private readonly DispatcherTimer satisfactionFadeTimer;
-    private readonly DispatcherTimer introTimer;
+    private readonly DispatcherTimer externalInputTimer;
     private readonly Random random = new();
     private readonly List<AudioClip> bounceClips = new();
     private readonly List<StageCorner> recentCornerHits = [];
+    private readonly Dictionary<Control, CancellationTokenSource> dynamicButtonAnimations = new();
 
     private CancellationTokenSource? satisfactionOpacityCancellation;
+    private CancellationTokenSource? powerTransitionCancellation;
+    private CancellationTokenSource? debugRailAnimationCancellation;
     private AudioClip? introClip;
     private Bitmap? logoTemplate;
+    private byte[]? currentLogoPixels;
     private Vector velocity = new(280, 190);
     private DateTime lastFrameTime;
-    private DateTime introStartTime;
     private Point? currentCornerTarget;
     private StageCorner? lastCornerHit;
     private Color currentLogoColor = Colors.White;
-    private double introStartY;
-    private double introFinalY;
+    private int currentLogoPixelWidth;
+    private int currentLogoPixelHeight;
+    private int currentLogoPixelStride;
     private double logoX;
     private double logoY;
     private bool isDraggingSatisfaction;
     private bool isDraggingGlassFresnel;
     private bool isDraggingCornerRadius;
+    private bool isOrbitingCamera;
+    private Slider? activeCrtEffectSlider;
+    private Point lastCameraPointerPosition;
     private bool isBouncing;
+    private bool isPowerTransitioning;
+    private bool isClosed;
+    private bool isExternalInputActive;
+    private FfmpegVideoSource? ffmpegVideoSource;
+    private WindowsGraphicsCaptureSource? windowsCaptureSource;
+    private string? selectedFfmpegPath;
+    private readonly object externalFrameLock = new();
+    private InputFrameEventArgs? latestExternalFrame;
 
     // Sets up the window, timers, and starting visual state.
     public MainWindow()
@@ -82,6 +104,13 @@ public partial class MainWindow : Window
 
         ScreenSurface.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
         ScreenSurface.RenderTransform = new ScaleTransform(1.018, 1.012);
+        SetupDynamicButton(PowerButton);
+        SetupDynamicButton(ViewportPowerButton);
+        SetupDynamicButton(ResetCameraButton);
+        SetupDynamicButton(FullscreenButton);
+        SetupDynamicButton(SkipBackwardButton);
+        SetupDynamicButton(SkipForwardButton);
+        DebugRail.RenderTransform = new TranslateTransform();
         SatisfactionSliderThumb.RenderTransform = new TranslateTransform();
         GlassFresnelSliderThumb.RenderTransform = new TranslateTransform();
         CornerRadiusSliderThumb.RenderTransform = new TranslateTransform();
@@ -92,6 +121,7 @@ public partial class MainWindow : Window
         UpdateCrtEffectSettings();
         UpdateScreenCornerRadius();
         UpdateKeepVisibleOption();
+        SetDebugRailVisibility(true, animate: false);
 
         satisfactionFadeTimer = new DispatcherTimer
         {
@@ -99,44 +129,59 @@ public partial class MainWindow : Window
         };
         satisfactionFadeTimer.Tick += SatisfactionFadeTimer_Tick;
 
-        introTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(16)
-        };
-        introTimer.Tick += IntroTimer_Tick;
-
         bounceTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
             Interval = TimeSpan.FromMilliseconds(16)
         };
         bounceTimer.Tick += BounceTimer_Tick;
 
+        externalInputTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            // Keep the TV surface on a 60 Hz cadence. The latest available
+            // frame is presented on each tick, so a slower source is repeated
+            // smoothly while a faster source cannot queue work on the UI thread.
+            Interval = TimeSpan.FromMilliseconds(1000.0 / 60.0)
+        };
+        externalInputTimer.Tick += ExternalInputTimer_Tick;
+
         Loaded += Window_Loaded;
-        KeyDown += Window_KeyDown;
+        AddHandler(KeyDownEvent, Window_KeyDown, RoutingStrategies.Tunnel);
         Closed += Window_Closed;
     }
 
-    // Runs when the window opens: loads assets, plays the intro sound, and starts the intro animation.
+    // Runs when the window opens and leaves the TV surface powered off until the power button is clicked.
     private void Window_Loaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         LoadLogo();
         LoadBounceSounds();
         PositionLogoForIntro();
-        PlayIntroSound();
-        BeginIntroAnimation();
+        DvdLogoImage.Opacity = 0;
+        PowerFlickerOverlay.Opacity = 0;
+        PowerOffOverlay.Opacity = EnableDvdScreensaver ? 1 : 0;
+        ShowDebugControlsNow();
+        SetPowerStartHintVisible(EnableDvdScreensaver);
+        SetPowerControlTooltip(EnableDvdScreensaver ? "Power on" : "Power off");
+        InputStatusText.Text = EnableDvdScreensaver ? "DVD screensaver" : "TV ready for input";
         UpdateFullscreenButtonText();
+        UpdateTvDebugCamera();
+        PushScreenToTvTexture();
     }
 
     // Stops timers and releases audio/image resources when the window closes.
     private void Window_Closed(object? sender, EventArgs e)
     {
-        introTimer.Stop();
+        isClosed = true;
+        powerTransitionCancellation?.Cancel();
         bounceTimer.Stop();
+        externalInputTimer.Stop();
         satisfactionFadeTimer.Stop();
         satisfactionOpacityCancellation?.Cancel();
+        debugRailAnimationCancellation?.Cancel();
+        StopExternalInputSynchronously();
         introClip?.Dispose();
         CloseBounceClips();
         logoTemplate?.Dispose();
+        CancelDynamicButtonAnimations();
     }
 
     // Loads the DVD logo from the bundled Avalonia app assets.
@@ -149,7 +194,7 @@ public partial class MainWindow : Window
         ApplyLogoColor(Colors.White);
     }
 
-    // Plays the CRT switch-on sound at startup if the MP3 is present.
+    // Plays the CRT switch-on sound if the MP3 is present.
     private void PlayIntroSound()
     {
         var audioPath = GetOutputAssetPath(IntroSoundFileName);
@@ -182,60 +227,6 @@ public partial class MainWindow : Window
         }
     }
 
-    // Starts the logo fade-in and upward movement before the controls appear.
-    private void BeginIntroAnimation()
-    {
-        introTimer.Stop();
-
-        introStartY = GetCenteredLogoY();
-        introFinalY = GetIntroLogoY();
-
-        Canvas.SetLeft(DvdLogoImage, GetCenteredLogoX());
-        Canvas.SetTop(DvdLogoImage, introStartY);
-        DvdLogoImage.Opacity = 0;
-        ControlsPanel.IsVisible = true;
-        ControlsPanel.IsHitTestVisible = false;
-        ControlsPanel.Opacity = 0;
-
-        introStartTime = DateTime.UtcNow;
-        introTimer.Start();
-    }
-
-    // Advances the intro animation a frame at a time.
-    private void IntroTimer_Tick(object? sender, EventArgs e)
-    {
-        var elapsedSeconds = (DateTime.UtcNow - introStartTime).TotalSeconds;
-
-        DvdLogoImage.Opacity = EaseOutQuad(Clamp01(elapsedSeconds / 2.4));
-
-        if (elapsedSeconds >= 1.25)
-        {
-            var liftProgress = EaseInOutCubic(Clamp01((elapsedSeconds - 1.25) / 2.7));
-            var currentY = Lerp(introStartY, introFinalY, liftProgress);
-            Canvas.SetTop(DvdLogoImage, currentY);
-            logoY = currentY;
-        }
-
-        if (elapsedSeconds >= 3.4)
-        {
-            ControlsPanel.Opacity = EaseOutQuad(Clamp01((elapsedSeconds - 3.4) / 0.75));
-        }
-
-        if (elapsedSeconds < 4.2)
-        {
-            return;
-        }
-
-        introTimer.Stop();
-        DvdLogoImage.Opacity = 1;
-        ControlsPanel.IsHitTestVisible = true;
-        ControlsPanel.Opacity = 1;
-        logoX = Canvas.GetLeft(DvdLogoImage);
-        logoY = introFinalY;
-        Canvas.SetTop(DvdLogoImage, logoY);
-        WakeSatisfactionPanel();
-    }
-
     // Places the logo in its pre-start intro position.
     private void PositionLogoForIntro()
     {
@@ -243,44 +234,781 @@ public partial class MainWindow : Window
         logoY = GetIntroLogoY();
         Canvas.SetLeft(DvdLogoImage, logoX);
         Canvas.SetTop(DvdLogoImage, logoY);
+        PushScreenToTvTexture();
     }
 
-    // Starts the bouncing mode when the Start button is clicked.
-    private void StartButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    // Power is independent of whether the current source is the logo or video.
+    private async void PowerButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        StartBouncing();
+        if (isPowerTransitioning)
+        {
+            return;
+        }
+
+        if (!EnableDvdScreensaver)
+        {
+            if (PowerOffOverlay.Opacity >= 0.99)
+            {
+                PowerOffOverlay.Opacity = 0;
+                SetPowerControlTooltip("Power off");
+                InputStatusText.Text = "TV ready for input";
+                PushScreenToTvTexture();
+            }
+            else
+            {
+                await StopExternalInputAsync();
+                TvModelStage.ClearExternalVideoFrame();
+                PowerOffOverlay.Opacity = 1;
+                SetPowerControlTooltip("Power on");
+                InputStatusText.Text = "TV powered off";
+                PushScreenToTvTexture();
+            }
+
+            return;
+        }
+
+        if (PowerOffOverlay.Opacity < 0.99)
+        {
+            await PowerOff();
+            return;
+        }
+
+        await PowerOn();
     }
 
     // Switches between the normal window and fullscreen when the fullscreen button is clicked.
     private void FullscreenButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         ToggleFullscreen();
-        WakeSatisfactionPanel();
     }
 
-    // Opens or closes the right-side option drawer.
-    private void OptionsButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    // Opens a video file and sends its decoded frames into the TV screen.
+    private async void OpenVideoButton_Click(object? sender, RoutedEventArgs e)
     {
-        if (ControlsPanel.IsVisible && ControlsPanel.Opacity > 0.5)
+        if (!CanChangeExternalInput())
         {
-            satisfactionFadeTimer.Stop();
-            AnimateSatisfactionPanelOpacity(0, TimeSpan.FromMilliseconds(180), hideWhenComplete: true);
             return;
         }
 
-        WakeSatisfactionPanel();
+        var ffmpegPath = selectedFfmpegPath ?? FindFfmpegPath();
+        if (ffmpegPath is null)
+        {
+            var ffmpegFiles = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Locate ffmpeg.exe",
+                AllowMultiple = false,
+                FileTypeFilter =
+                [
+                    new FilePickerFileType("FFmpeg executable")
+                    {
+                        Patterns = ["ffmpeg.exe"]
+                    }
+                ]
+            });
+
+            ffmpegPath = ffmpegFiles.FirstOrDefault()?.Path.LocalPath;
+            if (ffmpegPath is null)
+            {
+                InputStatusText.Text = "Video cancelled: ffmpeg.exe is required.";
+                return;
+            }
+
+            selectedFfmpegPath = ffmpegPath;
+        }
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Choose a video for the TV",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("Video files")
+                {
+                    Patterns = ["*.mp4", "*.mkv", "*.mov", "*.avi", "*.webm", "*.wmv", "*.m4v"]
+                }
+            ]
+        });
+
+        var file = files.FirstOrDefault();
+        if (file is null)
+        {
+            return;
+        }
+
+        var path = file.Path.LocalPath;
+        await StopExternalInputAsync();
+
+        try
+        {
+            ffmpegVideoSource = new FfmpegVideoSource();
+            ffmpegVideoSource.FrameReady += ExternalInput_FrameReady;
+            await ffmpegVideoSource.StartAsync(ffmpegPath, path);
+            ActivateExternalInput($"Video: {file.Name}");
+        }
+        catch (Exception exception)
+        {
+            await StopExternalInputAsync();
+            InputStatusText.Text = $"Video could not start: {exception.Message}";
+        }
     }
 
-    // Lets Escape leave fullscreen without closing the app.
+    // Resolves a YouTube link to a playable stream and sends it through the
+    // same FFmpeg, CRT shader, and vintage speaker path as local videos.
+    private async void PlayYoutubeButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (!CanChangeExternalInput())
+        {
+            return;
+        }
+
+        var url = YoutubeUrlTextBox.Text?.Trim();
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || !uri.Host.Contains("youtube", StringComparison.OrdinalIgnoreCase)
+                && !uri.Host.Contains("youtu.be", StringComparison.OrdinalIgnoreCase))
+        {
+            InputStatusText.Text = "Paste a valid YouTube link first.";
+            return;
+        }
+
+        var ffmpegPath = selectedFfmpegPath ?? FindFfmpegPath();
+        if (ffmpegPath is null)
+        {
+            var ffmpegFiles = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Locate ffmpeg.exe",
+                AllowMultiple = false,
+                FileTypeFilter =
+                [
+                    new FilePickerFileType("FFmpeg executable")
+                    {
+                        Patterns = ["ffmpeg.exe"]
+                    }
+                ]
+            });
+
+            ffmpegPath = ffmpegFiles.FirstOrDefault()?.Path.LocalPath;
+            if (ffmpegPath is null)
+            {
+                InputStatusText.Text = "YouTube cancelled: ffmpeg.exe is required.";
+                return;
+            }
+
+            selectedFfmpegPath = ffmpegPath;
+        }
+
+        PlayYoutubeButton.IsEnabled = false;
+        InputStatusText.Text = "Resolving YouTube link...";
+
+        try
+        {
+            var youtube = new YoutubeClient();
+            var video = await youtube.Videos.GetAsync(url);
+            var manifest = await youtube.Videos.Streams.GetManifestAsync(video.Id);
+            var muxedStreams = manifest.GetMuxedStreams()
+                .Where(candidate => candidate.Container == Container.Mp4)
+                .ToList();
+
+            await StopExternalInputAsync();
+            ffmpegVideoSource = new FfmpegVideoSource();
+            ffmpegVideoSource.FrameReady += ExternalInput_FrameReady;
+
+            if (muxedStreams.Count > 0)
+            {
+                var stream = muxedStreams.GetWithHighestVideoQuality();
+                await ffmpegVideoSource.StartStreamAsync(ffmpegPath, stream.Url);
+            }
+            else
+            {
+                var videoStreams = manifest.GetVideoOnlyStreams().ToList();
+                var videoStreamsAt720p = videoStreams
+                    .Where(candidate => candidate.VideoQuality.MaxHeight <= 720)
+                    .ToList();
+                var videoStream = (videoStreamsAt720p.Count > 0 ? videoStreamsAt720p : videoStreams)
+                    .OrderByDescending(candidate => candidate.VideoQuality.MaxHeight)
+                    .FirstOrDefault();
+                var audioStream = manifest.GetAudioOnlyStreams()
+                    .OrderByDescending(candidate => candidate.Bitrate.BitsPerSecond)
+                    .FirstOrDefault();
+
+                if (videoStream is null || audioStream is null)
+                {
+                    throw new InvalidOperationException("YouTube did not provide compatible video and audio streams.");
+                }
+
+                await ffmpegVideoSource.StartStreamPairAsync(ffmpegPath, videoStream.Url, audioStream.Url);
+            }
+
+            ActivateExternalInput($"YouTube: {video.Title}");
+        }
+        catch (Exception exception)
+        {
+            await StopExternalInputAsync();
+            InputStatusText.Text = $"YouTube could not start: {exception.Message}";
+        }
+        finally
+        {
+            PlayYoutubeButton.IsEnabled = true;
+        }
+    }
+
+    // Opens the secure Windows picker for a window or display and starts WGC.
+    private async void CaptureScreenButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (!CanChangeExternalInput())
+        {
+            return;
+        }
+
+        var ownerHandle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (ownerHandle == IntPtr.Zero)
+        {
+            InputStatusText.Text = "The Windows capture picker could not find this window.";
+            return;
+        }
+
+        await StopExternalInputAsync();
+
+        try
+        {
+            windowsCaptureSource = new WindowsGraphicsCaptureSource();
+            windowsCaptureSource.FrameReady += ExternalInput_FrameReady;
+            windowsCaptureSource.CaptureFailed += CaptureSource_Failed;
+
+            if (!await windowsCaptureSource.PickAndStartAsync(ownerHandle))
+            {
+                await StopExternalInputAsync();
+                return;
+            }
+
+            ActivateExternalInput("Live Windows capture");
+        }
+        catch (Exception exception)
+        {
+            await StopExternalInputAsync();
+            InputStatusText.Text = $"Screen capture could not start: {exception.Message}";
+        }
+    }
+
+    // Stops file playback or WGC and returns the TV to its built-in screensaver.
+    private async void StopInputButton_Click(object? sender, RoutedEventArgs e)
+    {
+        await StopExternalInputAsync();
+        TvModelStage.ClearExternalVideoFrame();
+        InputStatusText.Text = "DVD screensaver";
+
+        if (EnableDvdScreensaver && PowerOffOverlay.Opacity < 0.99 && !isPowerTransitioning)
+        {
+            StartBouncing();
+        }
+        else
+        {
+            PushScreenToTvTexture();
+        }
+    }
+
+    private async void SkipBackwardButton_Click(object? sender, RoutedEventArgs e)
+    {
+        await SkipExternalInputAsync(TimeSpan.FromSeconds(-10));
+    }
+
+    private async void SkipForwardButton_Click(object? sender, RoutedEventArgs e)
+    {
+        await SkipExternalInputAsync(TimeSpan.FromSeconds(10));
+    }
+
+    private async Task SkipExternalInputAsync(TimeSpan amount)
+    {
+        if (ffmpegVideoSource is null || !ffmpegVideoSource.CanSeek)
+        {
+            return;
+        }
+
+        SkipBackwardButton.IsEnabled = false;
+        SkipForwardButton.IsEnabled = false;
+        InputStatusText.Text = amount < TimeSpan.Zero ? "Seeking backward..." : "Seeking forward...";
+
+        InputFrameEventArgs? pendingFrame;
+        lock (externalFrameLock)
+        {
+            pendingFrame = latestExternalFrame;
+            latestExternalFrame = null;
+        }
+        pendingFrame?.Release();
+
+        try
+        {
+            await ffmpegVideoSource.SkipAsync(amount);
+            InputStatusText.Text = "Video input";
+        }
+        catch (Exception exception)
+        {
+            InputStatusText.Text = $"Seek failed: {exception.Message}";
+        }
+        finally
+        {
+            var canSeek = ffmpegVideoSource?.CanSeek == true;
+            SkipBackwardButton.IsEnabled = canSeek;
+            SkipForwardButton.IsEnabled = canSeek;
+        }
+    }
+
+    private bool CanChangeExternalInput()
+    {
+        if (isPowerTransitioning)
+        {
+            return false;
+        }
+
+        if (PowerOffOverlay.Opacity >= 0.99)
+        {
+            InputStatusText.Text = "Power on the TV first.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private void ActivateExternalInput(string status)
+    {
+        isExternalInputActive = true;
+        bounceTimer.Stop();
+        isBouncing = false;
+        currentCornerTarget = null;
+        DvdLogoImage.Opacity = 0;
+        PowerFlickerOverlay.Opacity = 0;
+        PowerOffOverlay.Opacity = 0;
+        InputStatusText.Text = status;
+        StopInputButton.IsEnabled = true;
+        SkipBackwardButton.IsEnabled = ffmpegVideoSource?.CanSeek == true;
+        SkipForwardButton.IsEnabled = ffmpegVideoSource?.CanSeek == true;
+        externalInputTimer.Start();
+        PushScreenToTvTexture();
+    }
+
+    private void ExternalInput_FrameReady(object? sender, InputFrameEventArgs e)
+    {
+        if (isClosed)
+        {
+            e.Release();
+            return;
+        }
+
+        InputFrameEventArgs? replacedFrame;
+        lock (externalFrameLock)
+        {
+            replacedFrame = latestExternalFrame;
+            latestExternalFrame = e;
+        }
+        replacedFrame?.Release();
+    }
+
+    private void ExternalInputTimer_Tick(object? sender, EventArgs e)
+    {
+        if (isClosed || !isExternalInputActive)
+        {
+            return;
+        }
+
+        InputFrameEventArgs? frame;
+        lock (externalFrameLock)
+        {
+            frame = latestExternalFrame;
+            latestExternalFrame = null;
+        }
+
+        if (frame is null)
+        {
+            return;
+        }
+
+        try
+        {
+            TvModelStage.SetExternalVideoFrame(frame.Pixels, frame.Width, frame.Height, frame.Stride);
+            if (frame.Sequence > 0)
+            {
+                InputStatusText.Text = $"Live Windows capture • frame {frame.Sequence}";
+            }
+            PushScreenToTvTexture();
+            ffmpegVideoSource?.StartSynchronizedAudio();
+        }
+        finally
+        {
+            frame.Release();
+        }
+    }
+
+    private void CaptureSource_Failed(object? sender, CaptureErrorEventArgs e)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!isClosed)
+            {
+                InputStatusText.Text = $"Capture frame error: {e.Exception.Message}";
+            }
+        });
+    }
+
+    private async Task StopExternalInputAsync()
+    {
+        isExternalInputActive = false;
+        externalInputTimer.Stop();
+        InputFrameEventArgs? pendingFrame;
+        lock (externalFrameLock)
+        {
+            pendingFrame = latestExternalFrame;
+            latestExternalFrame = null;
+        }
+        pendingFrame?.Release();
+
+        if (ffmpegVideoSource is not null)
+        {
+            ffmpegVideoSource.FrameReady -= ExternalInput_FrameReady;
+            await ffmpegVideoSource.DisposeAsync();
+            ffmpegVideoSource = null;
+        }
+
+        if (windowsCaptureSource is not null)
+        {
+            windowsCaptureSource.FrameReady -= ExternalInput_FrameReady;
+            windowsCaptureSource.CaptureFailed -= CaptureSource_Failed;
+            windowsCaptureSource.Dispose();
+            windowsCaptureSource = null;
+        }
+
+        if (!isClosed && StopInputButton is not null)
+        {
+            StopInputButton.IsEnabled = false;
+            SkipBackwardButton.IsEnabled = false;
+            SkipForwardButton.IsEnabled = false;
+        }
+    }
+
+    private void StopExternalInputSynchronously()
+    {
+        isExternalInputActive = false;
+        externalInputTimer.Stop();
+        InputFrameEventArgs? pendingFrame;
+        lock (externalFrameLock)
+        {
+            pendingFrame = latestExternalFrame;
+            latestExternalFrame = null;
+        }
+        pendingFrame?.Release();
+        ffmpegVideoSource?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        ffmpegVideoSource = null;
+        SkipBackwardButton.IsEnabled = false;
+        SkipForwardButton.IsEnabled = false;
+        windowsCaptureSource?.Dispose();
+        windowsCaptureSource = null;
+    }
+
+    private static string? FindFfmpegPath()
+    {
+        var candidates = new List<string>
+        {
+            Environment.GetEnvironmentVariable("DVDLOGO_FFMPEG") ?? string.Empty,
+            Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe"),
+            Path.Combine(AppContext.BaseDirectory, "ffmpeg", "ffmpeg.exe")
+        };
+
+        var pathVariable = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        candidates.AddRange(pathVariable.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => Path.Combine(path.Trim(), "ffmpeg.exe")));
+
+        var wingetPackages = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Microsoft",
+            "WinGet",
+            "Packages");
+        if (Directory.Exists(wingetPackages))
+        {
+            try
+            {
+                candidates.AddRange(Directory.EnumerateFiles(wingetPackages, "ffmpeg.exe", SearchOption.AllDirectories));
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // A package manager may protect part of its cache; PATH and
+                // the app-local locations remain valid discovery options.
+            }
+        }
+
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    // Keeps the debug camera sliders synced with the 3D TV stage.
+    private void CameraSlider_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        UpdateTvDebugCamera();
+    }
+
+    // Restores the front-on test camera.
+    private void ResetCameraButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        ResetDebugCamera();
+    }
+
+    // Toggles the debug rail without taking space away from the TV when it is hidden.
+    private void DebugMenuButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        ShowOptionsView(false);
+        SetDebugRailVisibility(DebugRail is not null && !DebugRail.IsVisible);
+    }
+
+    private void OpenDebugOptions_Click(object? sender, RoutedEventArgs e) => ShowOptionsView(true);
+
+    private void BackToOptions_Click(object? sender, RoutedEventArgs e) => ShowOptionsView(false);
+
+    private void ShowOptionsView(bool debug)
+    {
+        BasicOptionsPanel.IsVisible = !debug;
+        DebugOptionsPanel.IsVisible = debug;
+        OptionsTitle.Text = debug ? "Debug options" : "Options";
+        OptionsScrollViewer.Offset = new Vector(0, 0);
+    }
+
+    // Closes the debug rail from its own header button.
+    private void CloseDebugMenuButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        SetDebugRailVisibility(false);
+    }
+
+    private void SetDebugRailVisibility(bool isVisible, bool animate = true)
+    {
+        if (DebugRail is null || AppLayout.ColumnDefinitions.Count < 2)
+        {
+            return;
+        }
+
+        debugRailAnimationCancellation?.Cancel();
+
+        if (!animate)
+        {
+            ApplyDebugRailVisibility(isVisible);
+            return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        debugRailAnimationCancellation = cancellation;
+        _ = AnimateDebugRailAsync(isVisible, cancellation);
+    }
+
+    private async Task AnimateDebugRailAsync(bool isVisible, CancellationTokenSource cancellation)
+    {
+        var cancellationToken = cancellation.Token;
+        var transform = DebugRail.RenderTransform as TranslateTransform;
+        var startWidth = AppLayout.ColumnDefinitions[1].Width.Value;
+        var targetWidth = isVisible ? 280 : 0;
+        var startOpacity = DebugRail.Opacity;
+        var targetOpacity = isVisible ? 1 : 0;
+        var startOffset = transform?.X ?? 0;
+        var targetOffset = isVisible ? 0 : 28;
+        var startTime = DateTime.UtcNow;
+        var duration = TimeSpan.FromMilliseconds(260);
+
+        if (isVisible)
+        {
+            DebugRail.IsVisible = true;
+            DebugMenuButton.IsVisible = false;
+            ViewportPowerButton.IsVisible = false;
+        }
+
+        try
+        {
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var progress = Clamp01((DateTime.UtcNow - startTime).TotalMilliseconds / duration.TotalMilliseconds);
+                var eased = EaseOutQuad(progress);
+                AppLayout.ColumnDefinitions[1].Width = new GridLength(Lerp(startWidth, targetWidth, eased));
+                DebugRail.Opacity = Lerp(startOpacity, targetOpacity, eased);
+
+                if (transform is not null)
+                {
+                    transform.X = Lerp(startOffset, targetOffset, eased);
+                }
+
+                if (progress >= 1)
+                {
+                    break;
+                }
+
+                await Task.Delay(16, cancellationToken);
+            }
+
+            ApplyDebugRailVisibility(isVisible);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(debugRailAnimationCancellation, cancellation))
+            {
+                debugRailAnimationCancellation = null;
+            }
+
+            cancellation.Dispose();
+        }
+    }
+
+    private void ApplyDebugRailVisibility(bool isVisible)
+    {
+        AppLayout.ColumnDefinitions[1].Width = new GridLength(isVisible ? 280 : 0);
+        DebugRail.Opacity = isVisible ? 1 : 0;
+        DebugRail.IsVisible = isVisible;
+        DebugMenuButton.IsVisible = !isVisible;
+        ViewportPowerButton.IsVisible = !isVisible;
+
+        if (DebugRail.RenderTransform is TranslateTransform transform)
+        {
+            transform.X = 0;
+        }
+
+        ToolTip.SetTip(DebugMenuButton, "Show options");
+    }
+
+    private void SetPowerControlEnabled(bool isEnabled)
+    {
+        PowerButton.IsEnabled = isEnabled;
+        ViewportPowerButton.IsEnabled = isEnabled;
+    }
+
+    private void SetPowerControlTooltip(string tooltip)
+    {
+        ToolTip.SetTip(PowerButton, tooltip);
+        ToolTip.SetTip(ViewportPowerButton, tooltip);
+    }
+
+    // Handles keyboard camera controls even when a child control has focus.
     private void Window_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Escape || WindowState != WindowState.FullScreen)
+        if (e.Key == Key.Escape && WindowState == WindowState.FullScreen)
+        {
+            ExitFullscreen();
+            e.Handled = true;
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Left:
+                AdjustCamera(headingDelta: -3);
+                break;
+            case Key.Right:
+                AdjustCamera(headingDelta: 3);
+                break;
+            case Key.Up:
+                AdjustCamera(attitudeDelta: 2);
+                break;
+            case Key.Down:
+                AdjustCamera(attitudeDelta: -2);
+                break;
+            case Key.Add:
+            case Key.OemPlus:
+                AdjustCamera(distanceDelta: -0.2);
+                break;
+            case Key.Subtract:
+            case Key.OemMinus:
+                AdjustCamera(distanceDelta: 0.2);
+                break;
+            default:
+                return;
+        }
+
+        e.Handled = true;
+    }
+
+    // Begins camera orbiting when the user drags anywhere over the 3D viewport.
+    private void TvViewportHost_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(TvViewportHost).Properties.IsLeftButtonPressed)
         {
             return;
         }
 
-        ExitFullscreen();
+        TvViewportHost.Focus();
+        isOrbitingCamera = true;
+        lastCameraPointerPosition = e.GetPosition(TvViewportHost);
+        e.Pointer.Capture(TvViewportHost);
         e.Handled = true;
+    }
+
+    // Orbits the camera as the pointer is dragged across the 3D viewport.
+    private void TvViewportHost_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!isOrbitingCamera)
+        {
+            return;
+        }
+
+        var pointerPoint = e.GetCurrentPoint(TvViewportHost);
+        if (!pointerPoint.Properties.IsLeftButtonPressed)
+        {
+            EndCameraOrbit(e.Pointer);
+            return;
+        }
+
+        var position = e.GetPosition(TvViewportHost);
+        var delta = position - lastCameraPointerPosition;
+        lastCameraPointerPosition = position;
+        AdjustCamera(headingDelta: delta.X * 0.32, attitudeDelta: -delta.Y * 0.24);
+        e.Handled = true;
+    }
+
+    // Finishes the current camera orbit when the primary pointer button is released.
+    private void TvViewportHost_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!isOrbitingCamera)
+        {
+            return;
+        }
+
+        EndCameraOrbit(e.Pointer);
+        e.Handled = true;
+    }
+
+    // Avoids leaving the camera in drag mode when capture is handed to another control.
+    private void TvViewportHost_PointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        isOrbitingCamera = false;
+    }
+
+    // Uses the mouse wheel as a fine zoom control over the 3D viewport.
+    private void TvViewportHost_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        TvViewportHost.Focus();
+        AdjustCamera(distanceDelta: -e.Delta.Y * 0.2);
+        e.Handled = true;
+    }
+
+    // Updates the camera slider values while preserving their tested ranges.
+    private void AdjustCamera(double headingDelta = 0, double attitudeDelta = 0, double distanceDelta = 0)
+    {
+        if (CameraHeadingSlider is null || CameraAttitudeSlider is null || CameraDistanceSlider is null)
+        {
+            return;
+        }
+
+        CameraHeadingSlider.Value = Math.Clamp(
+            CameraHeadingSlider.Value + headingDelta,
+            CameraHeadingSlider.Minimum,
+            CameraHeadingSlider.Maximum);
+        CameraAttitudeSlider.Value = Math.Clamp(
+            CameraAttitudeSlider.Value + attitudeDelta,
+            CameraAttitudeSlider.Minimum,
+            CameraAttitudeSlider.Maximum);
+        CameraDistanceSlider.Value = Math.Clamp(
+            CameraDistanceSlider.Value + distanceDelta,
+            CameraDistanceSlider.Minimum,
+            CameraDistanceSlider.Maximum);
+    }
+
+    private void EndCameraOrbit(IPointer pointer)
+    {
+        isOrbitingCamera = false;
+        pointer.Capture(null);
     }
 
     // Enters fullscreen if windowed, or returns to windowed mode if already fullscreen.
@@ -311,14 +1039,60 @@ public partial class MainWindow : Window
             WindowState == WindowState.FullScreen ? "Exit fullscreen" : "Fullscreen");
     }
 
-    // Switches from the intro screen into the live bouncing logo simulation.
-    private void StartBouncing()
+    // Powers on the TV surface and immediately starts the live bouncing logo.
+    private async Task PowerOn()
     {
-        introTimer.Stop();
+        powerTransitionCancellation?.Dispose();
+        var transition = new CancellationTokenSource();
+        powerTransitionCancellation = transition;
+        var cancellationToken = transition.Token;
 
-        DvdLogoImage.Opacity = 1;
-        ControlsPanel.Opacity = 1;
-        WakeSatisfactionPanel();
+        isPowerTransitioning = true;
+        SetPowerControlEnabled(false);
+        ResetCameraButton.IsEnabled = false;
+        FullscreenButton.IsEnabled = false;
+
+        try
+        {
+            SetPowerStartHintVisible(false);
+            PositionLogoForIntro();
+            PlayIntroSound();
+            await RunPowerOnFlicker(cancellationToken);
+            StartBouncing(revealImmediately: false);
+            await RunPowerOnFade(cancellationToken);
+            InputStatusText.Text = "TV ready for input";
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (!isClosed)
+            {
+                SetPowerControlEnabled(true);
+                ResetCameraButton.IsEnabled = true;
+                FullscreenButton.IsEnabled = true;
+                isPowerTransitioning = false;
+            }
+
+            if (ReferenceEquals(powerTransitionCancellation, transition))
+            {
+                transition.Dispose();
+                powerTransitionCancellation = null;
+            }
+        }
+    }
+
+    // Switches into the live bouncing logo simulation.
+    private void StartBouncing(bool revealImmediately = true)
+    {
+        if (revealImmediately)
+        {
+            PowerFlickerOverlay.Opacity = 0;
+            PowerOffOverlay.Opacity = 0;
+            DvdLogoImage.Opacity = 1;
+            PushScreenToTvTexture();
+        }
 
         logoX = GetValidCanvasValue(Canvas.GetLeft(DvdLogoImage), GetCenteredLogoX());
         logoY = GetValidCanvasValue(Canvas.GetTop(DvdLogoImage), GetIntroLogoY());
@@ -331,10 +1105,312 @@ public partial class MainWindow : Window
         ApplySatisfactionBounce();
 
         isBouncing = true;
-        StartButton.Content = "Running";
-        StartButton.IsEnabled = false;
+        SetPowerControlTooltip("Power off");
         lastFrameTime = DateTime.UtcNow;
         bounceTimer.Start();
+    }
+
+    // Powers down the TV surface with a flicker and leaves it off.
+    private async Task PowerOff()
+    {
+        powerTransitionCancellation?.Dispose();
+        var transition = new CancellationTokenSource();
+        powerTransitionCancellation = transition;
+        var cancellationToken = transition.Token;
+
+        isPowerTransitioning = true;
+        SetPowerControlEnabled(false);
+        ResetCameraButton.IsEnabled = false;
+        FullscreenButton.IsEnabled = false;
+        satisfactionFadeTimer.Stop();
+        satisfactionOpacityCancellation?.Cancel();
+        bounceTimer.Stop();
+        isBouncing = false;
+        await StopExternalInputAsync();
+        TvModelStage.ClearExternalVideoFrame();
+        InputStatusText.Text = "DVD screensaver";
+        currentCornerTarget = null;
+        lastCornerHit = null;
+        recentCornerHits.Clear();
+
+        try
+        {
+            SetPowerStartHintVisible(false);
+            await RunPowerFlicker(cancellationToken);
+            await RunPowerOffFade(cancellationToken);
+
+            PositionLogoForIntro();
+            DvdLogoImage.Opacity = 0;
+            ShowDebugControlsNow();
+            PowerOffOverlay.Opacity = 1;
+            SetPowerStartHintVisible(true);
+            SetPowerControlTooltip("Power on");
+            InputStatusText.Text = "TV powered off";
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (!isClosed)
+            {
+                PowerFlickerOverlay.Opacity = 0;
+                SetPowerControlEnabled(true);
+                ResetCameraButton.IsEnabled = true;
+                FullscreenButton.IsEnabled = true;
+                isPowerTransitioning = false;
+            }
+
+            if (ReferenceEquals(powerTransitionCancellation, transition))
+            {
+                transition.Dispose();
+                powerTransitionCancellation = null;
+            }
+        }
+    }
+
+    // Gives the TV a small wake flicker before the logo begins moving.
+    private async Task RunPowerOnFlicker(CancellationToken cancellationToken)
+    {
+        PowerOffOverlay.Opacity = 1;
+        PowerFlickerOverlay.Opacity = 0;
+        DvdLogoImage.Opacity = 0;
+
+        var flickerSteps = new[]
+        {
+            (White: 0.0, Black: 1.0, Delay: 70),
+            (White: 0.48, Black: 0.35, Delay: 32),
+            (White: 0.0, Black: 0.68, Delay: 38),
+            (White: 0.26, Black: 0.18, Delay: 26),
+            (White: 0.0, Black: 0.0, Delay: 35)
+        };
+
+        foreach (var step in flickerSteps)
+        {
+            PowerFlickerOverlay.Opacity = step.White;
+            PowerOffOverlay.Opacity = step.Black;
+            PushScreenToTvTexture();
+            await Task.Delay(step.Delay, cancellationToken);
+        }
+
+        PowerFlickerOverlay.Opacity = 0;
+        PowerOffOverlay.Opacity = 0.58;
+        PushScreenToTvTexture();
+    }
+
+    // Slowly brings the live screen into view while the logo begins moving.
+    private async Task RunPowerOnFade(CancellationToken cancellationToken)
+    {
+        var startTime = DateTime.UtcNow;
+        var duration = TimeSpan.FromMilliseconds(1050);
+        var startBlack = PowerOffOverlay.Opacity;
+        var startLogo = DvdLogoImage.Opacity;
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var progress = Clamp01((DateTime.UtcNow - startTime).TotalMilliseconds / duration.TotalMilliseconds);
+            var eased = EaseOutQuad(progress);
+
+            PowerOffOverlay.Opacity = Lerp(startBlack, 0, eased);
+            DvdLogoImage.Opacity = Lerp(startLogo, 1, eased);
+            PushScreenToTvTexture();
+
+            if (progress >= 1)
+            {
+                break;
+            }
+
+            await Task.Delay(16, cancellationToken);
+        }
+
+        PowerOffOverlay.Opacity = 0;
+        DvdLogoImage.Opacity = 1;
+        PushScreenToTvTexture();
+    }
+
+    // Creates the quick flash feel of an old TV turning off.
+    private async Task RunPowerFlicker(CancellationToken cancellationToken)
+    {
+        var flickerSteps = new[]
+        {
+            (White: 0.88, Black: 0.0, Delay: 34),
+            (White: 0.0, Black: 0.4, Delay: 42),
+            (White: 0.48, Black: 0.14, Delay: 28),
+            (White: 0.0, Black: 0.46, Delay: 48),
+            (White: 0.22, Black: 0.24, Delay: 24),
+            (White: 0.0, Black: 0.22, Delay: 70)
+        };
+
+        foreach (var step in flickerSteps)
+        {
+            PowerFlickerOverlay.Opacity = step.White;
+            PowerOffOverlay.Opacity = step.Black;
+            DvdLogoImage.Opacity = Math.Max(0, 1 - step.Black);
+            PushScreenToTvTexture();
+            await Task.Delay(step.Delay, cancellationToken);
+        }
+
+        PowerFlickerOverlay.Opacity = 0;
+        PushScreenToTvTexture();
+    }
+
+    // Slowly fades the live screen into the off state.
+    private async Task RunPowerOffFade(CancellationToken cancellationToken)
+    {
+        var startTime = DateTime.UtcNow;
+        var duration = TimeSpan.FromMilliseconds(920);
+        var startBlack = PowerOffOverlay.Opacity;
+        var startLogo = DvdLogoImage.Opacity;
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var progress = Clamp01((DateTime.UtcNow - startTime).TotalMilliseconds / duration.TotalMilliseconds);
+            var eased = EaseOutQuad(progress);
+
+            PowerOffOverlay.Opacity = Lerp(startBlack, 1, eased);
+            DvdLogoImage.Opacity = Lerp(startLogo, 0, eased);
+            PushScreenToTvTexture();
+
+            if (progress >= 1)
+            {
+                break;
+            }
+
+            await Task.Delay(16, cancellationToken);
+        }
+
+        PowerOffOverlay.Opacity = 1;
+        DvdLogoImage.Opacity = 0;
+        PushScreenToTvTexture();
+    }
+
+    // Gives the round console buttons a small physical lift/dip response.
+    private static void SetupDynamicButton(Control button)
+    {
+        var transform = new TransformGroup();
+        transform.Children.Add(new ScaleTransform(1, 1));
+        transform.Children.Add(new TranslateTransform());
+
+        button.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
+        button.RenderTransform = transform;
+    }
+
+    private void DynamicButton_PointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (sender is Control button && button.IsEnabled)
+        {
+            AnimateDynamicButton(button, 1.015, -0.5);
+        }
+    }
+
+    private void DynamicButton_PointerExited(object? sender, PointerEventArgs e)
+    {
+        if (sender is Control button)
+        {
+            AnimateDynamicButton(button, 1, 0);
+        }
+    }
+
+    private void DynamicButton_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Control button && button.IsEnabled)
+        {
+            AnimateDynamicButton(button, 0.94, 3);
+        }
+    }
+
+    private void DynamicButton_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (sender is Control button && button.IsEnabled)
+        {
+            AnimateDynamicButton(button, button.IsPointerOver ? 1.015 : 1, button.IsPointerOver ? -0.5 : 0);
+        }
+    }
+
+    private async void AnimateDynamicButton(Control button, double targetScale, double targetY)
+    {
+        if (button.RenderTransform is not TransformGroup transform
+            || transform.Children.Count < 2
+            || transform.Children[0] is not ScaleTransform scale
+            || transform.Children[1] is not TranslateTransform translate)
+        {
+            return;
+        }
+
+        if (dynamicButtonAnimations.TryGetValue(button, out var previousAnimation))
+        {
+            previousAnimation.Cancel();
+        }
+
+        var animation = new CancellationTokenSource();
+        var animationToken = animation.Token;
+        dynamicButtonAnimations[button] = animation;
+        var startScale = scale.ScaleX;
+        var startY = translate.Y;
+        var startTime = DateTime.UtcNow;
+        var duration = TimeSpan.FromMilliseconds(135);
+        var completed = false;
+
+        try
+        {
+            while (true)
+            {
+                animationToken.ThrowIfCancellationRequested();
+
+                var progress = Clamp01((DateTime.UtcNow - startTime).TotalMilliseconds / duration.TotalMilliseconds);
+                var eased = EaseOutQuad(progress);
+
+                scale.ScaleX = Lerp(startScale, targetScale, eased);
+                scale.ScaleY = Lerp(startScale, targetScale, eased);
+                translate.Y = Lerp(startY, targetY, eased);
+
+                if (progress >= 1)
+                {
+                    break;
+                }
+
+                await Task.Delay(16, animationToken);
+            }
+
+            completed = true;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        finally
+        {
+            if (dynamicButtonAnimations.TryGetValue(button, out var currentAnimation)
+                && currentAnimation == animation)
+            {
+                dynamicButtonAnimations.Remove(button);
+            }
+
+            animation.Dispose();
+        }
+
+        if (completed)
+        {
+            scale.ScaleX = targetScale;
+            scale.ScaleY = targetScale;
+            translate.Y = targetY;
+        }
+    }
+
+    private void CancelDynamicButtonAnimations()
+    {
+        foreach (var animation in dynamicButtonAnimations.Values)
+        {
+            animation.Cancel();
+        }
+
+        dynamicButtonAnimations.Clear();
     }
 
     // Moves the logo each frame and handles wall hits, corner hits, sounds, colours, and retargeting.
@@ -422,6 +1498,8 @@ public partial class MainWindow : Window
             SetVelocityMagnitude(GetLogoSpeed());
             ApplySatisfactionBounce();
         }
+
+        PushScreenToTvTexture();
     }
 
     // Plays one of the loaded bounce effects at random.
@@ -476,11 +1554,12 @@ public partial class MainWindow : Window
         }
 
         currentLogoColor = color;
-        DvdLogoImage.Source = CreateTintedLogo(logoTemplate, color);
+        DvdLogoImage.Source = CreateTintedLogo(logoTemplate, color, out currentLogoPixels);
+        PushScreenToTvTexture();
     }
 
     // Rebuilds the logo bitmap by tinting dark pixels and clearing pale background pixels.
-    private static WriteableBitmap CreateTintedLogo(Bitmap source, Color color)
+    private WriteableBitmap CreateTintedLogo(Bitmap source, Color color, out byte[] tintedPixels)
     {
         var bitmap = new WriteableBitmap(source.PixelSize, source.Dpi, PixelFormat.Bgra8888, AlphaFormat.Unpremul);
 
@@ -490,6 +1569,9 @@ public partial class MainWindow : Window
         var bufferLength = framebuffer.RowBytes * framebuffer.Size.Height;
         var pixels = new byte[bufferLength];
         Marshal.Copy(framebuffer.Address, pixels, 0, pixels.Length);
+        currentLogoPixelWidth = framebuffer.Size.Width;
+        currentLogoPixelHeight = framebuffer.Size.Height;
+        currentLogoPixelStride = framebuffer.RowBytes;
 
         for (var y = 0; y < framebuffer.Size.Height; y++)
         {
@@ -523,6 +1605,7 @@ public partial class MainWindow : Window
         }
 
         Marshal.Copy(pixels, 0, framebuffer.Address, pixels.Length);
+        tintedPixels = pixels;
 
         return bitmap;
     }
@@ -640,6 +1723,18 @@ public partial class MainWindow : Window
         WakeSatisfactionPanel();
     }
 
+    // Controls how strongly the imported TV glass texture is drawn over the live signal.
+    private void GlassTextureOpacitySlider_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (GlassTextureOpacityValueText is not null)
+        {
+            GlassTextureOpacityValueText.Text = $"{Math.Round(e.NewValue)}%";
+        }
+
+        TvModelStage?.SetScreenGlassOpacity(e.NewValue / 100);
+        WakeSatisfactionPanel();
+    }
+
     // Keeps the custom Fresnel slider aligned when its area resizes.
     private void GlassFresnelSliderShell_SizeChanged(object? sender, SizeChangedEventArgs e)
     {
@@ -724,11 +1819,58 @@ public partial class MainWindow : Window
         WakeSatisfactionPanel();
     }
 
+    // Gives the CRT effect sliders predictable track-click and drag behavior.
+    private void CrtEffectSlider_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Slider slider)
+        {
+            return;
+        }
+
+        activeCrtEffectSlider = slider;
+        e.Pointer.Capture(slider);
+        SetSliderFromPointer(e, slider, slider);
+        e.Handled = true;
+    }
+
+    // Keeps the selected CRT effect in sync while the pointer is dragged.
+    private void CrtEffectSlider_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (activeCrtEffectSlider is null || !ReferenceEquals(sender, activeCrtEffectSlider))
+        {
+            return;
+        }
+
+        var pointerPoint = e.GetCurrentPoint(activeCrtEffectSlider);
+        if (!pointerPoint.Properties.IsLeftButtonPressed)
+        {
+            activeCrtEffectSlider = null;
+            e.Pointer.Capture(null);
+            return;
+        }
+
+        SetSliderFromPointer(e, activeCrtEffectSlider, activeCrtEffectSlider);
+        e.Handled = true;
+    }
+
+    // Releases the explicit CRT effect drag capture.
+    private void CrtEffectSlider_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (activeCrtEffectSlider is null || !ReferenceEquals(sender, activeCrtEffectSlider))
+        {
+            return;
+        }
+
+        SetSliderFromPointer(e, activeCrtEffectSlider, activeCrtEffectSlider);
+        activeCrtEffectSlider = null;
+        e.Pointer.Capture(null);
+        e.Handled = true;
+    }
+
     // Sends all TV effect settings to the separate CRT overlay.
     private void UpdateCrtEffectSettings()
     {
-        if (CrtOverlay is null
-            || CrtCurveSlider is null
+        if (CrtCurveSlider is null
             || CrtScanlineSlider is null
             || CrtNoiseSlider is null
             || CrtGlitchSlider is null
@@ -738,12 +1880,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        CrtOverlay.CurveStrength = GetPercentValue(CrtCurveSlider);
-        CrtOverlay.ScanlineStrength = GetPercentValue(CrtScanlineSlider);
-        CrtOverlay.NoiseStrength = GetPercentValue(CrtNoiseSlider);
-        CrtOverlay.GlitchStrength = GetPercentValue(CrtGlitchSlider);
-        CrtOverlay.VignetteStrength = GetPercentValue(CrtVignetteSlider);
-        CrtOverlay.FresnelStrength = GetPercentValue(GlassFresnelSlider);
+        TvModelStage?.SetCrtEffectSettings(
+            GetPercentValue(CrtCurveSlider),
+            GetPercentValue(CrtScanlineSlider),
+            GetPercentValue(CrtNoiseSlider),
+            GetPercentValue(CrtGlitchSlider),
+            GetPercentValue(CrtVignetteSlider),
+            GetPercentValue(GlassFresnelSlider));
+        PushScreenToTvTexture();
     }
 
     // Keeps all CRT labels in sync with their sliders.
@@ -972,30 +2116,75 @@ public partial class MainWindow : Window
         var isChecked = KeepSatisfactionVisibleToggle.IsChecked == true;
 
         OptionMark.IsVisible = isChecked;
-        OptionBox.Background = new SolidColorBrush(isChecked ? Color.Parse("#F7FAFC") : Color.Parse("#263140"));
-        OptionBox.BorderBrush = new SolidColorBrush(isChecked ? Color.Parse("#F7FAFC") : Color.Parse("#4B5A6D"));
+        OptionBox.Background = new SolidColorBrush(isChecked ? Color.Parse("#DDE4DF") : Color.Parse("#9CA5A2"));
+        OptionBox.BorderBrush = new SolidColorBrush(isChecked ? Color.Parse("#4E5757") : Color.Parse("#4E5757"));
+    }
+
+    // Sends the debug camera values to the 3D TV stage.
+    private void UpdateTvDebugCamera()
+    {
+        if (TvModelStage is null
+            || CameraHeadingSlider is null
+            || CameraAttitudeSlider is null
+            || CameraDistanceSlider is null)
+        {
+            return;
+        }
+
+        TvModelStage.SetCamera(
+            CameraHeadingSlider.Value,
+            CameraAttitudeSlider.Value,
+            CameraDistanceSlider.Value);
+    }
+
+    // Resets the debug camera controls to the default front view.
+    private void ResetDebugCamera()
+    {
+        if (CameraHeadingSlider is null
+            || CameraAttitudeSlider is null
+            || CameraDistanceSlider is null)
+        {
+            return;
+        }
+
+        CameraHeadingSlider.Value = 0;
+        CameraAttitudeSlider.Value = -2;
+        CameraDistanceSlider.Value = 3.25;
+        TvModelStage?.ResetCamera();
     }
 
     // Shows the option drawer and restarts its auto-hide timer when needed.
     private void WakeSatisfactionPanel()
+    {
+        ShowDebugControlsNow();
+        satisfactionFadeTimer.Stop();
+    }
+
+    // Keeps the debug rail visible while the 3D integration is being tuned.
+    private void ShowDebugControlsNow()
     {
         if (ControlsPanel is null)
         {
             return;
         }
 
-        ControlsPanel.IsVisible = true;
+        satisfactionFadeTimer.Stop();
+        satisfactionOpacityCancellation?.Cancel();
+        ControlsPanel.Opacity = 1;
         ControlsPanel.IsHitTestVisible = true;
-        AnimateSatisfactionPanelOpacity(1, TimeSpan.FromMilliseconds(180), hideWhenComplete: false);
+        ControlsPanel.IsVisible = true;
+    }
 
-        if (KeepSatisfactionVisibleToggle?.IsChecked == true)
+    // Shows the startup hint only while the TV is waiting for the first power press.
+    private void SetPowerStartHintVisible(bool isVisible)
+    {
+        if (PowerStartHint is null)
         {
-            satisfactionFadeTimer.Stop();
             return;
         }
 
-        satisfactionFadeTimer.Stop();
-        satisfactionFadeTimer.Start();
+        PowerStartHint.Opacity = isVisible ? 1 : 0;
+        PowerStartHint.IsVisible = isVisible;
     }
 
     // Smoothly fades the option drawer and fully hides it after the fade-out finishes.
@@ -1458,6 +2647,39 @@ public partial class MainWindow : Window
         return Path.Combine(AppContext.BaseDirectory, "Assets", fileName);
     }
 
+    // Sends the current DVD screen state into the 3D TV screen material.
+    private void PushScreenToTvTexture()
+    {
+        if (TvModelStage is null
+            || BounceStage is null
+            || DvdLogoImage is null
+            || PowerOffOverlay is null
+            || PowerFlickerOverlay is null)
+        {
+            return;
+        }
+
+        var stageWidth = BounceStage.Bounds.Width > 0 ? BounceStage.Bounds.Width : 640;
+        var stageHeight = BounceStage.Bounds.Height > 0 ? BounceStage.Bounds.Height : 424;
+        var currentLogoX = GetValidCanvasValue(Canvas.GetLeft(DvdLogoImage), logoX);
+        var currentLogoY = GetValidCanvasValue(Canvas.GetTop(DvdLogoImage), logoY);
+
+        TvModelStage.UpdateScreenTexture(
+            currentLogoPixels,
+            currentLogoPixelWidth,
+            currentLogoPixelHeight,
+            currentLogoPixelStride,
+            currentLogoX,
+            currentLogoY,
+            DvdLogoImage.Width,
+            DvdLogoImage.Height,
+            stageWidth,
+            stageHeight,
+            DvdLogoImage.Opacity,
+            PowerOffOverlay.Opacity,
+            PowerFlickerOverlay.Opacity);
+    }
+
     // Keeps a percentage-style number between 0 and 1.
     private static double Clamp01(double value)
     {
@@ -1580,25 +2802,83 @@ public sealed class SpeakerGrilleControl : Control
             return;
         }
 
-        var panelBrush = new SolidColorBrush(Color.FromArgb(42, 255, 255, 255));
-        var holeBrush = new SolidColorBrush(Color.FromArgb(180, 9, 12, 14));
-        var sheenPen = new Pen(new SolidColorBrush(Color.FromArgb(42, 255, 255, 255)), 1);
+        var panelBrush = new SolidColorBrush(Color.FromArgb(36, 255, 255, 255));
+        var holeBrush = new SolidColorBrush(Color.FromArgb(96, 48, 56, 55));
+        var ovalBrush = new SolidColorBrush(Color.FromArgb(36, 96, 106, 104));
+        var ovalHoleBrush = new SolidColorBrush(Color.FromArgb(130, 34, 39, 38));
+        var sheenPen = new Pen(new SolidColorBrush(Color.FromArgb(84, 255, 255, 255)), 1);
+        var shadowPen = new Pen(new SolidColorBrush(Color.FromArgb(64, 72, 82, 80)), 1);
         var bounds = new Rect(0.5, 0.5, Math.Max(0, width - 1), Math.Max(0, height - 1));
 
-        context.DrawRectangle(panelBrush, null, bounds, 5, 5);
-        context.DrawLine(sheenPen, bounds.TopLeft + new Vector(8, 4), bounds.TopRight - new Vector(8, -4));
+        context.DrawRectangle(panelBrush, shadowPen, bounds, 3, 3);
+        context.DrawLine(sheenPen, bounds.TopLeft + new Vector(5, 3), bounds.TopRight - new Vector(5, -3));
 
-        const double spacing = 8;
-        const double radius = 2;
+        const double spacing = 4;
+        const double radius = 0.85;
 
-        for (var y = 9.0; y <= height - 9; y += spacing)
+        for (var y = 7.0; y <= height - 7; y += spacing)
         {
-            var offset = ((int)(y / spacing) % 2) * 3.5;
-
-            for (var x = 9.0 + offset; x <= width - 9; x += spacing)
+            for (var x = 7.0; x <= width - 7; x += spacing)
             {
                 context.DrawEllipse(holeBrush, null, new Point(x, y), radius, radius);
             }
+        }
+
+        var ovalWidth = Math.Min(width * 0.48, 46);
+        var ovalHeight = Math.Min(height * 0.34, 116);
+        var oval = new Rect(
+            (width - ovalWidth) / 2,
+            (height - ovalHeight) / 2,
+            ovalWidth,
+            ovalHeight);
+        var ovalRadius = ovalWidth / 2;
+
+        context.DrawRectangle(ovalBrush, shadowPen, oval, ovalRadius, ovalRadius);
+
+        for (var y = oval.Top + 8; y <= oval.Bottom - 8; y += spacing)
+        {
+            for (var x = oval.Left + 8; x <= oval.Right - 8; x += spacing)
+            {
+                var normalizedX = (x - oval.Center.X) / (ovalWidth / 2);
+                var normalizedY = (y - oval.Center.Y) / (ovalHeight / 2);
+
+                if ((normalizedX * normalizedX) + (normalizedY * normalizedY) <= 1)
+                {
+                    context.DrawEllipse(ovalHoleBrush, null, new Point(x, y), radius, radius);
+                }
+            }
+        }
+    }
+}
+
+// Draws the dark horizontal louver below the glass, matching the TV reference.
+public sealed class ScreenLouverControl : Control
+{
+    public override void Render(DrawingContext context)
+    {
+        base.Render(context);
+
+        var width = Bounds.Width;
+        var height = Bounds.Height;
+
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        var bodyBrush = new SolidColorBrush(Color.FromRgb(10, 12, 13));
+        var lipBrush = new SolidColorBrush(Color.FromRgb(28, 31, 32));
+        var groovePen = new Pen(new SolidColorBrush(Color.FromArgb(185, 45, 50, 52)), 1.2);
+        var shadowPen = new Pen(new SolidColorBrush(Color.FromArgb(210, 0, 0, 0)), 1.4);
+        var bounds = new Rect(0, 0, width, height);
+
+        context.DrawRectangle(bodyBrush, null, bounds, 2, 2);
+        context.DrawRectangle(lipBrush, null, new Rect(0, 0, width, Math.Min(8, height * 0.25)), 2, 2);
+
+        for (var y = 11.5; y < height - 3; y += 4)
+        {
+            context.DrawLine(groovePen, new Point(0, y), new Point(width, y));
+            context.DrawLine(shadowPen, new Point(0, y + 1.5), new Point(width, y + 1.5));
         }
     }
 }

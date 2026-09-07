@@ -4,89 +4,74 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DvdLogoApp"
         mc:Ignorable="d"
-        d:DesignWidth="980"
-        d:DesignHeight="640"
+        d:DesignWidth="1120"
+        d:DesignHeight="700"
         x:Class="DvdLogoApp.MainWindow"
         Title="DVD Logo Satisfaction"
-        Width="980"
-        Height="640"
-        MinWidth="760"
-        MinHeight="520"
+        Width="1120"
+        Height="700"
+        MinWidth="920"
+        MinHeight="580"
         WindowStartupLocation="CenterScreen"
         Background="#070A0F"
         Foreground="#F7FAFC"
         FontFamily="{StaticResource JostFont}"
         FontWeight="Medium">
-    <!-- Shared fonts and colours used by the controls below. -->
     <Window.Resources>
-        <!-- Bundled Futura-like font loaded from the app assets. -->
         <FontFamily x:Key="JostFont">avares://DvdLogoApp/Assets/Fonts#Jost</FontFamily>
-        <!-- Semi-transparent panel background for floating controls. -->
-        <SolidColorBrush x:Key="PanelBrush" Color="#CC101722" />
-        <!-- Subtle border colour for floating controls. -->
-        <SolidColorBrush x:Key="PanelBorderBrush" Color="#334156" />
-        <!-- Muted text colour for labels. -->
         <SolidColorBrush x:Key="SoftTextBrush" Color="#AAB8C8" />
     </Window.Resources>
 
-    <!-- Reusable visual styles for the app buttons and custom toggle. -->
     <Window.Styles>
-        <!-- White command button style. -->
-        <Style Selector="Button.rounded">
-            <Setter Property="Height" Value="48" />
-            <Setter Property="Padding" Value="24,0" />
-            <Setter Property="Background" Value="#F7FAFC" />
-            <Setter Property="BorderBrush" Value="#F7FAFC" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Foreground" Value="#070A0F" />
-            <Setter Property="FontSize" Value="16" />
-            <Setter Property="FontWeight" Value="Medium" />
+        <Style Selector="Button.debug-button">
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Padding" Value="14,0" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-
-        <!-- Start button hover state. -->
-        <Style Selector="Button.rounded:pointerover">
-            <Setter Property="Background" Value="#E9EEF5" />
-            <Setter Property="BorderBrush" Value="#E9EEF5" />
-        </Style>
-
-        <!-- Start button pressed state. -->
-        <Style Selector="Button.rounded:pressed">
-            <Setter Property="Background" Value="#D8E1EC" />
-            <Setter Property="BorderBrush" Value="#D8E1EC" />
-        </Style>
-
-        <!-- Small icon button style. -->
-        <Style Selector="Button.screen-button">
-            <Setter Property="Width" Value="44" />
-            <Setter Property="Height" Value="44" />
-            <Setter Property="Padding" Value="10" />
-            <Setter Property="Background" Value="#EAF7FAFC" />
-            <Setter Property="BorderBrush" Value="#334156" />
+            <Setter Property="Background" Value="#E8ECE8" />
+            <Setter Property="BorderBrush" Value="#596461" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Foreground" Value="#F7FAFC" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="#070909" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
         </Style>
 
-        <!-- Fullscreen icon hover state. -->
-        <Style Selector="Button.screen-button:pointerover">
-            <Setter Property="Background" Value="#FFFFFFFF" />
-            <Setter Property="BorderBrush" Value="#5D6B80" />
+        <Style Selector="Button.debug-button:pressed">
+            <Setter Property="Background" Value="#BFC8C5" />
+            <Setter Property="BorderBrush" Value="#2E3635" />
         </Style>
 
-        <!-- Fullscreen icon pressed state. -->
-        <Style Selector="Button.screen-button:pressed">
-            <Setter Property="Background" Value="#D8E1EC" />
+        <Style Selector="Button.icon-button">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+        <Style Selector="StackPanel#BasicOptionsPanel Button.debug-button">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Height" Value="44" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="#242B30" />
+            <Setter Property="Foreground" Value="#F0F3F4" />
+            <Setter Property="BorderBrush" Value="#414B50" />
+        </Style>
+        <Style Selector="StackPanel#BasicOptionsPanel Button.debug-button:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#343F44" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+        <Style Selector="StackPanel#BasicOptionsPanel Button.debug-button:disabled">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+        <Style Selector="StackPanel#BasicOptionsPanel Button#PowerButton.debug-button">
+            <Setter Property="Background" Value="#C6E8DD" />
+            <Setter Property="Foreground" Value="#102820" />
+            <Setter Property="BorderBrush" Value="#C6E8DD" />
         </Style>
 
-        <!-- Removes the default checkbox look so we can draw our own control. -->
         <Style Selector="ToggleButton.option-toggle">
-            <Setter Property="Width" Value="22" />
-            <Setter Property="Height" Value="22" />
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -98,533 +83,674 @@
         </Style>
     </Window.Styles>
 
-    <!-- Outer page padding around the CRT body. -->
-    <Grid Margin="18">
-        <Border x:Name="TvCabinet"
-                Padding="24,22,24,18"
-                BorderBrush="#566066"
-                BorderThickness="1"
-                CornerRadius="14"
-                ClipToBounds="True">
-            <Border.Background>
-                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
-                    <GradientStop Color="#4E585D" Offset="0" />
-                    <GradientStop Color="#242B2F" Offset="0.58" />
-                    <GradientStop Color="#5A6266" Offset="1" />
-                </LinearGradientBrush>
-            </Border.Background>
+    <Grid x:Name="AppLayout">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="280" />
+        </Grid.ColumnDefinitions>
+        <Grid x:Name="TvViewportHost"
+              ClipToBounds="True"
+              Background="#070A0F"
+              Focusable="True"
+              PointerPressed="TvViewportHost_PointerPressed"
+              PointerMoved="TvViewportHost_PointerMoved"
+              PointerReleased="TvViewportHost_PointerReleased"
+              PointerCaptureLost="TvViewportHost_PointerCaptureLost"
+              PointerWheelChanged="TvViewportHost_PointerWheelChanged">
+            <local:TvModelStageControl x:Name="TvModelStage" />
 
-            <Grid RowDefinitions="*,116">
-                <Border x:Name="ScreenBezel"
-                        Grid.Row="0"
-                        Padding="10"
-                        Background="#10161A"
-                        BorderBrush="#BCEEFF"
-                        BorderThickness="2"
-                        CornerRadius="10.4"
+            <Border x:Name="ScreenBezel"
+                    Width="640"
+                    Height="424"
+                    Margin="0,0,0,74"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Opacity="0"
+                    Padding="0"
+                    Background="#05070A"
+                    BorderBrush="#25313A"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    ClipToBounds="True">
+                <Border x:Name="ScreenClip"
+                        Background="#05070A"
+                        CornerRadius="8"
                         ClipToBounds="True">
-                    <Grid>
-                        <Border x:Name="ScreenClip"
-                                Background="#05070A"
-                                CornerRadius="8.4"
-                                ClipToBounds="True">
-                            <!-- Main CRT surface: all game visuals sit inside this grid. -->
-                            <Grid x:Name="ScreenSurface"
-                                  ClipToBounds="True">
-                                <!-- The actual area the DVD logo bounces around inside. -->
-                                <Canvas x:Name="BounceStage"
-                                        ClipToBounds="True"
-                                        SizeChanged="BounceStage_SizeChanged">
-                                    <!-- Dark screen gradient behind the logo. -->
-                                    <Canvas.Background>
-                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
-                                            <GradientStop Color="#05070A" Offset="0" />
-                                            <GradientStop Color="#111A25" Offset="0.55" />
-                                            <GradientStop Color="#07090D" Offset="1" />
-                                        </LinearGradientBrush>
-                                    </Canvas.Background>
+                    <Grid x:Name="ScreenSurface"
+                          ClipToBounds="True">
+                        <Canvas x:Name="BounceStage"
+                                ClipToBounds="True"
+                                SizeChanged="BounceStage_SizeChanged">
+                            <Canvas.Background>
+                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                    <GradientStop Color="#05070A" Offset="0" />
+                                    <GradientStop Color="#111A25" Offset="0.55" />
+                                    <GradientStop Color="#07090D" Offset="1" />
+                                </LinearGradientBrush>
+                            </Canvas.Background>
 
-                                    <!-- DVD logo image; code-behind moves and recolours this. -->
-                                    <Image x:Name="DvdLogoImage"
-                                           Width="260"
-                                           Height="146"
-                                           Stretch="Uniform"
-                                           Opacity="0" />
-                                </Canvas>
+                            <Image x:Name="DvdLogoImage"
+                                   Width="180"
+                                   Height="101"
+                                   Stretch="Uniform"
+                                   Opacity="0" />
+                        </Canvas>
 
-                                <!-- Separate CRT simulation layer. -->
-                                <local:ShadertoyCrtControl x:Name="CrtOverlay"
-                                                           HorizontalAlignment="Stretch"
-                                                           VerticalAlignment="Stretch"
-                                                           ClipToBounds="True"
-                                                            IsHitTestVisible="False" />
-                            </Grid>
-                        </Border>
-
-                        <local:BezelCornerDepthControl x:Name="CornerDepthOverlay"
-                                                       CornerRadius="10.4"
-                                                       IsHitTestVisible="False" />
+                        <Border x:Name="PowerFlickerOverlay"
+                                Background="#EAF7FA"
+                                Opacity="0"
+                                IsHitTestVisible="False" />
+                        <Border x:Name="PowerOffOverlay"
+                                Background="#020303"
+                                Opacity="0"
+                                IsHitTestVisible="False" />
                     </Grid>
                 </Border>
+            </Border>
 
-                <Grid Grid.Row="0">
-                    <!-- Bottom option panel. -->
-                    <StackPanel x:Name="ControlsPanel"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Bottom"
-                                Width="560"
-                                Margin="0,0,0,16"
-                                Opacity="0"
-                                IsHitTestVisible="False"
-                                PointerEntered="SatisfactionPanel_PointerEntered"
-                                PointerMoved="SatisfactionPanel_PointerMoved"
-                                PointerPressed="SatisfactionPanel_PointerPressed">
-                        <Border x:Name="SatisfactionPanel"
-                                Padding="14"
-                                Background="{StaticResource PanelBrush}"
-                                BorderBrush="{StaticResource PanelBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8">
-                            <StackPanel Spacing="14">
-                                <TextBlock Text="Options"
+            <local:BezelCornerDepthControl x:Name="CornerDepthOverlay"
+                                           Width="640"
+                                           Height="424"
+                                           Margin="0,0,0,74"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Opacity="0"
+                                           CornerRadius="8"
+                                           IsHitTestVisible="False" />
+
+            <Border x:Name="PowerStartHint"
+                    Width="132"
+                    Height="36"
+                    Margin="0,0,0,38"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    CornerRadius="18"
+                    BorderBrush="#7B8684"
+                    BorderThickness="1"
+                    IsHitTestVisible="False">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="18%,0%" EndPoint="82%,100%">
+                        <GradientStop Color="#FFFFFF" Offset="0" />
+                        <GradientStop Color="#EDF2EE" Offset="0.4" />
+                        <GradientStop Color="#AFBBB7" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+                <TextBlock Text="Press to start"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="#070909"
+                           FontSize="13"
+                           FontWeight="SemiBold" />
+            </Border>
+
+            <Button x:Name="DebugMenuButton"
+                    Width="36"
+                    Height="36"
+                    Margin="0,14,14,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Classes="debug-button icon-button"
+                    ToolTip.Tip="Show options"
+                    Click="DebugMenuButton_Click">
+                <PathIcon Width="18" Height="14" Data="M0,0 H18 V2 H0 Z M0,6 H18 V8 H0 Z M0,12 H18 V14 H0 Z" />
+            </Button>
+
+            <Button x:Name="ViewportPowerButton"
+                    Width="78"
+                    Height="42"
+                    Margin="0,0,16,16"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Classes="debug-button"
+                    ToolTip.Tip="Power"
+                    PointerEntered="DynamicButton_PointerEntered"
+                    PointerExited="DynamicButton_PointerExited"
+                    PointerPressed="DynamicButton_PointerPressed"
+                    PointerReleased="DynamicButton_PointerReleased"
+                    Click="PowerButton_Click">
+                <TextBlock Text="Power" />
+            </Button>
+        </Grid>
+
+        <Border x:Name="DebugRail"
+                Grid.Column="1"
+                Padding="16"
+                Background="#111820"
+                BorderBrush="#25313A"
+                BorderThickness="1,0,0,0">
+            <ScrollViewer x:Name="OptionsScrollViewer" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="ControlsPanel"
+                            Opacity="1"
+                            IsHitTestVisible="True"
+                            Spacing="14"
+                            PointerEntered="SatisfactionPanel_PointerEntered"
+                            PointerMoved="SatisfactionPanel_PointerMoved"
+                            PointerPressed="SatisfactionPanel_PointerPressed">
+                    <Border x:Name="SatisfactionPanel"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0">
+                        <StackPanel Spacing="14">
+                            <Grid ColumnDefinitions="*,42">
+                                <TextBlock x:Name="OptionsTitle" Text="Options"
                                            VerticalAlignment="Center"
                                            Foreground="#F7FAFC"
-                                           FontSize="15"
-                                           FontWeight="Medium" />
-
-                                <Grid RowDefinitions="Auto,46"
-                                      ColumnDefinitions="*,48">
-                                    <TextBlock Text="Satisfaction"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource SoftTextBrush}"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <TextBlock x:Name="SatisfactionValueText"
-                                               Grid.Column="1"
-                                               Text="35%"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Right"
-                                               Foreground="#F7FAFC"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-
-                                    <Grid x:Name="SatisfactionSliderShell"
-                                          Grid.Row="1"
-                                          Grid.ColumnSpan="2"
-                                          Height="46"
-                                          Background="Transparent"
-                                          VerticalAlignment="Center"
-                                          SizeChanged="SatisfactionSliderShell_SizeChanged"
-                                          PointerPressed="SatisfactionSliderShell_PointerPressed"
-                                          PointerMoved="SatisfactionSliderShell_PointerMoved"
-                                          PointerReleased="SatisfactionSliderShell_PointerReleased"
-                                          PointerCaptureLost="SatisfactionSliderShell_PointerCaptureLost">
-                                        <Border Height="5"
-                                                VerticalAlignment="Center"
-                                                Background="#263140"
-                                                CornerRadius="2.5" />
-                                        <Border x:Name="SatisfactionSliderFill"
-                                                Width="0"
-                                                Height="5"
-                                                HorizontalAlignment="Left"
-                                                VerticalAlignment="Center"
-                                                Background="#F7FAFC"
-                                                CornerRadius="2.5" />
-                                        <Border x:Name="SatisfactionSliderThumb"
-                                                Width="18"
-                                                Height="18"
-                                                HorizontalAlignment="Left"
-                                                VerticalAlignment="Center"
-                                                Background="#F7FAFC"
-                                                BorderBrush="#D7E0EA"
-                                                BorderThickness="1"
-                                                CornerRadius="5" />
-                                        <Slider x:Name="SatisfactionSlider"
-                                                Minimum="0"
-                                                Maximum="100"
-                                                Value="35"
-                                                TickFrequency="5"
-                                                Height="46"
-                                                Opacity="0.01"
-                                                Background="Transparent"
-                                                Foreground="Transparent"
-                                                BorderBrush="Transparent"
-                                                Focusable="False"
-                                                IsHitTestVisible="False"
-                                                VerticalAlignment="Stretch"
-                                                ValueChanged="SatisfactionSlider_ValueChanged" />
-                                    </Grid>
-                                </Grid>
-
-                                <Grid RowDefinitions="Auto,40,Auto,40,Auto,40"
-                                      ColumnDefinitions="*,48">
-                                    <TextBlock Text="Curve"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource SoftTextBrush}"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <TextBlock x:Name="CrtCurveValueText"
-                                               Grid.Column="1"
-                                               Text="55%"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Right"
-                                               Foreground="#F7FAFC"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <Slider x:Name="CrtCurveSlider"
-                                            Grid.Row="1"
-                                            Grid.ColumnSpan="2"
-                                            Minimum="0"
-                                            Maximum="100"
-                                            Value="55"
-                                            ValueChanged="CrtEffectSlider_ValueChanged" />
-
-                                    <TextBlock Grid.Row="2"
-                                               Text="Scanlines"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource SoftTextBrush}"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <TextBlock x:Name="CrtScanlineValueText"
-                                               Grid.Row="2"
-                                               Grid.Column="1"
-                                               Text="42%"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Right"
-                                               Foreground="#F7FAFC"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <Slider x:Name="CrtScanlineSlider"
-                                            Grid.Row="3"
-                                            Grid.ColumnSpan="2"
-                                            Minimum="0"
-                                            Maximum="100"
-                                            Value="42"
-                                            ValueChanged="CrtEffectSlider_ValueChanged" />
-
-                                    <TextBlock Grid.Row="4"
-                                               Text="Noise"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource SoftTextBrush}"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <TextBlock x:Name="CrtNoiseValueText"
-                                               Grid.Row="4"
-                                               Grid.Column="1"
-                                               Text="5%"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Right"
-                                               Foreground="#F7FAFC"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <Slider x:Name="CrtNoiseSlider"
-                                            Grid.Row="5"
-                                            Grid.ColumnSpan="2"
-                                            Minimum="0"
-                                            Maximum="100"
-                                            Value="5"
-                                            ValueChanged="CrtEffectSlider_ValueChanged" />
-                                </Grid>
-
-                                <Grid RowDefinitions="Auto,40,Auto,40"
-                                      ColumnDefinitions="*,48">
-                                    <TextBlock Text="Glitch"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource SoftTextBrush}"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <TextBlock x:Name="CrtGlitchValueText"
-                                               Grid.Column="1"
-                                               Text="0%"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Right"
-                                               Foreground="#F7FAFC"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <Slider x:Name="CrtGlitchSlider"
-                                            Grid.Row="1"
-                                            Grid.ColumnSpan="2"
-                                            Minimum="0"
-                                            Maximum="100"
-                                            Value="0"
-                                            ValueChanged="CrtEffectSlider_ValueChanged" />
-
-                                    <TextBlock Grid.Row="2"
-                                               Text="Vignette"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource SoftTextBrush}"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <TextBlock x:Name="CrtVignetteValueText"
-                                               Grid.Row="2"
-                                               Grid.Column="1"
-                                               Text="52%"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Right"
-                                               Foreground="#F7FAFC"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <Slider x:Name="CrtVignetteSlider"
-                                            Grid.Row="3"
-                                            Grid.ColumnSpan="2"
-                                            Minimum="0"
-                                            Maximum="100"
-                                            Value="52"
-                                            ValueChanged="CrtEffectSlider_ValueChanged" />
-                                </Grid>
-
-                                <Grid RowDefinitions="Auto,46"
-                                      ColumnDefinitions="*,48">
-                                    <TextBlock Text="Fresnel"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource SoftTextBrush}"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <TextBlock x:Name="GlassFresnelValueText"
-                                               Grid.Column="1"
-                                               Text="58%"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Right"
-                                               Foreground="#F7FAFC"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-
-                                    <Grid x:Name="GlassFresnelSliderShell"
-                                          Grid.Row="1"
-                                          Grid.ColumnSpan="2"
-                                          Height="46"
-                                          Background="Transparent"
-                                          VerticalAlignment="Center"
-                                          SizeChanged="GlassFresnelSliderShell_SizeChanged"
-                                          PointerPressed="GlassFresnelSliderShell_PointerPressed"
-                                          PointerMoved="GlassFresnelSliderShell_PointerMoved"
-                                          PointerReleased="GlassFresnelSliderShell_PointerReleased"
-                                          PointerCaptureLost="GlassFresnelSliderShell_PointerCaptureLost">
-                                        <Border Height="5"
-                                                VerticalAlignment="Center"
-                                                Background="#263140"
-                                                CornerRadius="2.5" />
-                                        <Border x:Name="GlassFresnelSliderFill"
-                                                Width="0"
-                                                Height="5"
-                                                HorizontalAlignment="Left"
-                                                VerticalAlignment="Center"
-                                                Background="#BCEEFF"
-                                                CornerRadius="2.5" />
-                                        <Border x:Name="GlassFresnelSliderThumb"
-                                                Width="18"
-                                                Height="18"
-                                                HorizontalAlignment="Left"
-                                                VerticalAlignment="Center"
-                                                Background="#BCEEFF"
-                                                BorderBrush="#F7FAFC"
-                                                BorderThickness="1"
-                                                CornerRadius="5" />
-                                        <Slider x:Name="GlassFresnelSlider"
-                                                Minimum="0"
-                                                Maximum="100"
-                                                Value="58"
-                                                TickFrequency="5"
-                                                Height="46"
-                                                Opacity="0.01"
-                                                Background="Transparent"
-                                                Foreground="Transparent"
-                                                BorderBrush="Transparent"
-                                                Focusable="False"
-                                                IsHitTestVisible="False"
-                                                VerticalAlignment="Stretch"
-                                                ValueChanged="GlassFresnelSlider_ValueChanged" />
-                                    </Grid>
-                                </Grid>
-
-                                <Grid RowDefinitions="Auto,46"
-                                      ColumnDefinitions="*,48">
-                                    <TextBlock Text="Corner"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource SoftTextBrush}"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-                                    <TextBlock x:Name="CornerRadiusValueText"
-                                               Grid.Column="1"
-                                               Text="10px"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Right"
-                                               Foreground="#F7FAFC"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-
-                                    <Grid x:Name="CornerRadiusSliderShell"
-                                          Grid.Row="1"
-                                          Grid.ColumnSpan="2"
-                                          Height="46"
-                                          Background="Transparent"
-                                          VerticalAlignment="Center"
-                                          SizeChanged="CornerRadiusSliderShell_SizeChanged"
-                                          PointerPressed="CornerRadiusSliderShell_PointerPressed"
-                                          PointerMoved="CornerRadiusSliderShell_PointerMoved"
-                                          PointerReleased="CornerRadiusSliderShell_PointerReleased"
-                                          PointerCaptureLost="CornerRadiusSliderShell_PointerCaptureLost">
-                                        <Border Height="5"
-                                                VerticalAlignment="Center"
-                                                Background="#263140"
-                                                CornerRadius="2.5" />
-                                        <Border x:Name="CornerRadiusSliderFill"
-                                                Width="0"
-                                                Height="5"
-                                                HorizontalAlignment="Left"
-                                                VerticalAlignment="Center"
-                                                Background="#94A0A6"
-                                                CornerRadius="2.5" />
-                                        <Border x:Name="CornerRadiusSliderThumb"
-                                                Width="18"
-                                                Height="18"
-                                                HorizontalAlignment="Left"
-                                                VerticalAlignment="Center"
-                                                Background="#D3D8DB"
-                                                BorderBrush="#F7FAFC"
-                                                BorderThickness="1"
-                                                CornerRadius="5" />
-                                        <Slider x:Name="CornerRadiusSlider"
-                                                Minimum="4"
-                                                Maximum="28"
-                                                Value="10.4"
-                                                TickFrequency="1"
-                                                Height="46"
-                                                Opacity="0.01"
-                                                Background="Transparent"
-                                                Foreground="Transparent"
-                                                BorderBrush="Transparent"
-                                                Focusable="False"
-                                                IsHitTestVisible="False"
-                                                VerticalAlignment="Stretch"
-                                                ValueChanged="CornerRadiusSlider_ValueChanged" />
-                                    </Grid>
-                                </Grid>
-
-                                <Grid ColumnDefinitions="*,30">
-                                    <TextBlock Text="Keep visible"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource SoftTextBrush}"
-                                               FontSize="13"
-                                               FontWeight="Medium" />
-
-                                    <ToggleButton x:Name="KeepSatisfactionVisibleToggle"
-                                                  Grid.Column="1"
-                                                  HorizontalAlignment="Right"
-                                                  VerticalAlignment="Center"
-                                                  Classes="option-toggle"
-                                                  ToolTip.Tip="Keep visible"
-                                                  Click="KeepSatisfactionVisibleToggle_Click">
-                                        <Grid Width="22"
-                                              Height="22">
-                                            <Border x:Name="OptionBox"
-                                                    Background="#263140"
-                                                    BorderBrush="#4B5A6D"
-                                                    BorderThickness="1"
-                                                    CornerRadius="4" />
-                                            <Border x:Name="OptionMark"
-                                                    Width="10"
-                                                    Height="10"
-                                                    Background="#070A0F"
-                                                    CornerRadius="2"
-                                                    HorizontalAlignment="Center"
-                                                    VerticalAlignment="Center"
-                                                    IsVisible="False" />
-                                        </Grid>
-                                    </ToggleButton>
-                                </Grid>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </Grid>
-
-                <Border Grid.Row="1"
-                        Margin="0,14,0,0"
-                        Padding="18,12"
-                        BorderBrush="#1A2024"
-                        BorderThickness="1"
-                        CornerRadius="8">
-                    <Border.Background>
-                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-                            <GradientStop Color="#60686C" Offset="0" />
-                            <GradientStop Color="#3C4448" Offset="0.42" />
-                            <GradientStop Color="#23292D" Offset="1" />
-                        </LinearGradientBrush>
-                    </Border.Background>
-
-                    <Grid ColumnDefinitions="*,340,*">
-                        <local:SpeakerGrilleControl HorizontalAlignment="Left"
-                                                    VerticalAlignment="Center"
-                                                    Width="172"
-                                                    Height="56"
-                                                    IsHitTestVisible="False" />
-
-                        <StackPanel Grid.Column="1"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Spacing="8">
-                            <TextBlock Text="DVD VIDEO"
-                                       HorizontalAlignment="Center"
-                                       Foreground="#E2E0B5"
-                                       FontSize="13"
-                                       FontWeight="Medium" />
-
-                            <StackPanel Orientation="Horizontal"
-                                        HorizontalAlignment="Center"
-                                        Spacing="8">
-                                <Button x:Name="StartButton"
-                                        Content="Start"
-                                        Width="98"
+                                           FontSize="18"
+                                           FontWeight="SemiBold" />
+                                <Button Grid.Column="1"
+                                        Width="36"
                                         Height="36"
-                                        Background="#333B3F"
-                                        BorderBrush="#151A1D"
-                                        BorderThickness="1"
-                                        CornerRadius="5"
-                                        Foreground="#F7FAFC"
-                                        Cursor="Hand"
-                                        Click="StartButton_Click" />
-
-                                <Button x:Name="OptionsButton"
-                                        Content="Options"
-                                        Width="116"
-                                        Height="36"
-                                        Background="#333B3F"
-                                        BorderBrush="#151A1D"
-                                        BorderThickness="1"
-                                        CornerRadius="5"
-                                        Foreground="#F7FAFC"
-                                        Cursor="Hand"
-                                        ToolTip.Tip="Options"
-                                        Click="OptionsButton_Click" />
-
-                                <Button x:Name="FullscreenButton"
-                                        Width="98"
-                                        Height="36"
-                                        Background="#333B3F"
-                                        BorderBrush="#151A1D"
-                                        BorderThickness="1"
-                                        CornerRadius="5"
-                                        Foreground="#F7FAFC"
-                                        Cursor="Hand"
-                                        ToolTip.Tip="Fullscreen"
-                                        Click="FullscreenButton_Click">
-                                    <Image Source="avares://DvdLogoApp/Assets/fullscreen_icon.png"
-                                           Width="20"
-                                           Height="20"
-                                           Stretch="Uniform" />
+                                        HorizontalAlignment="Right"
+                                        Classes="debug-button icon-button"
+                                        ToolTip.Tip="Hide options"
+                                        Click="CloseDebugMenuButton_Click">
+                                    <PathIcon Width="14" Height="14" Data="M0,1.5 L1.5,0 L7,5.5 L12.5,0 L14,1.5 L8.5,7 L14,12.5 L12.5,14 L7,8.5 L1.5,14 L0,12.5 L5.5,7 Z" />
                                 </Button>
+                            </Grid>
+
+                            <StackPanel x:Name="BasicOptionsPanel" Spacing="12" Margin="0,6,0,0">
+                            <Button x:Name="PowerButton"
+                                    Classes="debug-button"
+                                    ToolTip.Tip="Power"
+                                    PointerEntered="DynamicButton_PointerEntered"
+                                    PointerExited="DynamicButton_PointerExited"
+                                    PointerPressed="DynamicButton_PointerPressed"
+                                    PointerReleased="DynamicButton_PointerReleased"
+                                    Click="PowerButton_Click">
+                                <TextBlock Text="Power" />
+                            </Button>
+
+                            <Border Height="1" Background="#303A40" Margin="0,6" />
+                            <TextBlock Text="Video source"
+                                       Foreground="{StaticResource SoftTextBrush}"
+                                       FontSize="13"
+                                       Margin="0,4,0,0" />
+
+                            <Button x:Name="OpenVideoButton"
+                                    Classes="debug-button"
+                                    ToolTip.Tip="Open a video file"
+                                    PointerEntered="DynamicButton_PointerEntered"
+                                    PointerExited="DynamicButton_PointerExited"
+                                    PointerPressed="DynamicButton_PointerPressed"
+                                    PointerReleased="DynamicButton_PointerReleased"
+                                    Click="OpenVideoButton_Click">
+                                <TextBlock Text="Open video" />
+                            </Button>
+
+                            <Grid ColumnDefinitions="*,44" ColumnSpacing="8">
+                                <TextBox x:Name="YoutubeUrlTextBox"
+                                         PlaceholderText="Paste YouTube link"
+                                         Height="44"
+                                         MinWidth="0"
+                                         Padding="10,0"
+                                         FontSize="12"
+                                         CornerRadius="6"
+                                         Background="#0C1115"
+                                         BorderBrush="#414B50"
+                                         VerticalContentAlignment="Center" />
+                                <Button x:Name="PlayYoutubeButton"
+                                        Grid.Column="1"
+                                        Classes="debug-button icon-button"
+                                        ToolTip.Tip="Play a YouTube link"
+                                        PointerEntered="DynamicButton_PointerEntered"
+                                        PointerExited="DynamicButton_PointerExited"
+                                        PointerPressed="DynamicButton_PointerPressed"
+                                        PointerReleased="DynamicButton_PointerReleased"
+                                        Click="PlayYoutubeButton_Click">
+                                    <PathIcon Width="12" Height="16" Data="M0,0 L12,8 L0,16 Z" />
+                                </Button>
+                            </Grid>
+
+                            <Button x:Name="CaptureScreenButton"
+                                    Classes="debug-button"
+                                    ToolTip.Tip="Share a window or screen"
+                                    PointerEntered="DynamicButton_PointerEntered"
+                                    PointerExited="DynamicButton_PointerExited"
+                                    PointerPressed="DynamicButton_PointerPressed"
+                                    PointerReleased="DynamicButton_PointerReleased"
+                                    Click="CaptureScreenButton_Click">
+                                <TextBlock Text="Capture screen" />
+                            </Button>
+
+                            <Button x:Name="StopInputButton"
+                                    Classes="debug-button"
+                                    ToolTip.Tip="Return to the DVD screensaver"
+                                    IsEnabled="False"
+                                    PointerEntered="DynamicButton_PointerEntered"
+                                    PointerExited="DynamicButton_PointerExited"
+                                    PointerPressed="DynamicButton_PointerPressed"
+                                    PointerReleased="DynamicButton_PointerReleased"
+                                    Click="StopInputButton_Click">
+                                <TextBlock Text="Stop input" />
+                            </Button>
+
+
+
+                            <TextBlock x:Name="InputStatusText"
+                                       Text="DVD screensaver"
+                                       Foreground="{StaticResource SoftTextBrush}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
+
+                            <Border Height="1" Background="#303A40" Margin="0,6" />
+                            <Button Classes="debug-button" Background="Transparent" BorderThickness="0" Foreground="{StaticResource SoftTextBrush}" Content="Debug options" Click="OpenDebugOptions_Click" />
+                            </StackPanel>
+                            <StackPanel x:Name="DebugOptionsPanel" IsVisible="False" Spacing="14">
+                            <Button Classes="debug-button" Content="Back to options" Click="BackToOptions_Click" />
+                            <Button x:Name="FullscreenButton"
+                                    Classes="debug-button"
+                                    ToolTip.Tip="Fullscreen"
+                                    PointerEntered="DynamicButton_PointerEntered"
+                                    PointerExited="DynamicButton_PointerExited"
+                                    PointerPressed="DynamicButton_PointerPressed"
+                                    PointerReleased="DynamicButton_PointerReleased"
+                                    Click="FullscreenButton_Click">
+                                <TextBlock Text="Fullscreen" />
+                            </Button>
+
+                            <Button x:Name="ResetCameraButton"
+                                    Classes="debug-button"
+                                    ToolTip.Tip="Reset camera"
+                                    PointerEntered="DynamicButton_PointerEntered"
+                                    PointerExited="DynamicButton_PointerExited"
+                                    PointerPressed="DynamicButton_PointerPressed"
+                                    PointerReleased="DynamicButton_PointerReleased"
+                                    Click="ResetCameraButton_Click">
+                                <TextBlock Text="Reset Camera" />
+                            </Button>
+
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                <Button x:Name="SkipBackwardButton"
+                                        Classes="debug-button"
+                                        ToolTip.Tip="Skip backward 10 seconds"
+                                        IsEnabled="False"
+                                        PointerEntered="DynamicButton_PointerEntered"
+                                        PointerExited="DynamicButton_PointerExited"
+                                        PointerPressed="DynamicButton_PointerPressed"
+                                        PointerReleased="DynamicButton_PointerReleased"
+                                        Click="SkipBackwardButton_Click">
+                                    <TextBlock Text="-10s" />
+                                </Button>
+                                <Button x:Name="SkipForwardButton"
+                                        Grid.Column="1"
+                                        Classes="debug-button"
+                                        ToolTip.Tip="Skip forward 10 seconds"
+                                        IsEnabled="False"
+                                        PointerEntered="DynamicButton_PointerEntered"
+                                        PointerExited="DynamicButton_PointerExited"
+                                        PointerPressed="DynamicButton_PointerPressed"
+                                        PointerReleased="DynamicButton_PointerReleased"
+                                        Click="SkipForwardButton_Click">
+                                    <TextBlock Text="+10s" />
+                                </Button>
+                            </Grid>
+                            <Grid RowDefinitions="Auto,36,Auto,36,Auto,36">
+                                <TextBlock Text="Rotate"
+                                           Foreground="{StaticResource SoftTextBrush}"
+                                           FontSize="13" />
+                                <Slider x:Name="CameraHeadingSlider"
+                                        Grid.Row="1"
+                                        Minimum="-80"
+                                        Maximum="80"
+                                        Value="0"
+                                        ValueChanged="CameraSlider_ValueChanged" />
+
+                                <TextBlock Grid.Row="2"
+                                           Text="Tilt"
+                                           Foreground="{StaticResource SoftTextBrush}"
+                                           FontSize="13" />
+                                <Slider x:Name="CameraAttitudeSlider"
+                                        Grid.Row="3"
+                                        Minimum="-35"
+                                        Maximum="25"
+                                        Value="-2"
+                                        ValueChanged="CameraSlider_ValueChanged" />
+
+                                <TextBlock Grid.Row="4"
+                                           Text="Zoom"
+                                           Foreground="{StaticResource SoftTextBrush}"
+                                           FontSize="13" />
+                                <Slider x:Name="CameraDistanceSlider"
+                                        Grid.Row="5"
+                                        Minimum="1.8"
+                                        Maximum="6.5"
+                                        Value="3.25"
+                                        ValueChanged="CameraSlider_ValueChanged" />
+                            </Grid>
+
+                            <Grid RowDefinitions="Auto,46"
+                                  IsVisible="False" IsEnabled="False"
+                                  ColumnDefinitions="*,48">
+                                <TextBlock Text="Satisfaction"
+                                           Foreground="{StaticResource SoftTextBrush}"
+                                           FontSize="13" />
+                                <TextBlock x:Name="SatisfactionValueText"
+                                           Grid.Column="1"
+                                           Text="0%"
+                                           HorizontalAlignment="Right"
+                                           Foreground="#F7FAFC"
+                                           FontSize="13" />
+
+                                <Grid x:Name="SatisfactionSliderShell"
+                                      Grid.Row="1"
+                                      Grid.ColumnSpan="2"
+                                      Height="46"
+                                      Background="Transparent"
+                                      SizeChanged="SatisfactionSliderShell_SizeChanged"
+                                      PointerPressed="SatisfactionSliderShell_PointerPressed"
+                                      PointerMoved="SatisfactionSliderShell_PointerMoved"
+                                      PointerReleased="SatisfactionSliderShell_PointerReleased"
+                                      PointerCaptureLost="SatisfactionSliderShell_PointerCaptureLost">
+                                    <Border Height="5"
+                                            VerticalAlignment="Center"
+                                            Background="#263140"
+                                            CornerRadius="2.5" />
+                                    <Border x:Name="SatisfactionSliderFill"
+                                            Width="0"
+                                            Height="5"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Background="#F7FAFC"
+                                            CornerRadius="2.5" />
+                                    <Border x:Name="SatisfactionSliderThumb"
+                                            Width="18"
+                                            Height="18"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Background="#F7FAFC"
+                                            BorderBrush="#D7E0EA"
+                                            BorderThickness="1"
+                                            CornerRadius="5" />
+                                    <Slider x:Name="SatisfactionSlider"
+                                            Minimum="0"
+                                            Maximum="0"
+                                            Value="0"
+                                            IsEnabled="False"
+                                            Height="46"
+                                            Opacity="0.01"
+                                            Focusable="False"
+                                            IsHitTestVisible="False"
+                                            ValueChanged="SatisfactionSlider_ValueChanged" />
+                                </Grid>
+                            </Grid>
+
+                            <Grid RowDefinitions="Auto,40,Auto,40,Auto,40,Auto,40,Auto,40"
+                                  ColumnDefinitions="*,48">
+                                <TextBlock Text="Curve"
+                                           Foreground="{StaticResource SoftTextBrush}"
+                                           FontSize="13" />
+                                <TextBlock x:Name="CrtCurveValueText"
+                                           Grid.Column="1"
+                                           Text="55%"
+                                           HorizontalAlignment="Right"
+                                           Foreground="#F7FAFC"
+                                           FontSize="13" />
+                                <Slider x:Name="CrtCurveSlider"
+                                        Grid.Row="1"
+                                        Grid.ColumnSpan="2"
+                                        Minimum="0"
+                                        Maximum="100"
+                                        Value="55"
+                                        PointerPressed="CrtEffectSlider_PointerPressed"
+                                        PointerMoved="CrtEffectSlider_PointerMoved"
+                                        PointerReleased="CrtEffectSlider_PointerReleased"
+                                        ValueChanged="CrtEffectSlider_ValueChanged" />
+
+                                <TextBlock Grid.Row="2"
+                                           Text="Scanlines"
+                                           Foreground="{StaticResource SoftTextBrush}"
+                                           FontSize="13" />
+                                <TextBlock x:Name="CrtScanlineValueText"
+                                           Grid.Row="2"
+                                           Grid.Column="1"
+                                           Text="42%"
+                                           HorizontalAlignment="Right"
+                                           Foreground="#F7FAFC"
+                                           FontSize="13" />
+                                <Slider x:Name="CrtScanlineSlider"
+                                        Grid.Row="3"
+                                        Grid.ColumnSpan="2"
+                                        Minimum="0"
+                                        Maximum="100"
+                                        Value="42"
+                                        PointerPressed="CrtEffectSlider_PointerPressed"
+                                        PointerMoved="CrtEffectSlider_PointerMoved"
+                                        PointerReleased="CrtEffectSlider_PointerReleased"
+                                        ValueChanged="CrtEffectSlider_ValueChanged" />
+
+                                <TextBlock Grid.Row="4"
+                                           Text="Noise"
+                                           Foreground="{StaticResource SoftTextBrush}"
+                                           FontSize="13" />
+                                <TextBlock x:Name="CrtNoiseValueText"
+                                           Grid.Row="4"
+                                           Grid.Column="1"
+                                           Text="5%"
+                                           HorizontalAlignment="Right"
+                                           Foreground="#F7FAFC"
+                                           FontSize="13" />
+                                <Slider x:Name="CrtNoiseSlider"
+                                        Grid.Row="5"
+                                        Grid.ColumnSpan="2"
+                                        Minimum="0"
+                                        Maximum="100"
+                                        Value="5"
+                                        PointerPressed="CrtEffectSlider_PointerPressed"
+                                        PointerMoved="CrtEffectSlider_PointerMoved"
+                                        PointerReleased="CrtEffectSlider_PointerReleased"
+                                        ValueChanged="CrtEffectSlider_ValueChanged" />
+
+                                <TextBlock Grid.Row="6"
+                                           Text="Glitch"
+                                           Foreground="{StaticResource SoftTextBrush}"
+                                           FontSize="13" />
+                                <TextBlock x:Name="CrtGlitchValueText"
+                                           Grid.Row="6"
+                                           Grid.Column="1"
+                                           Text="0%"
+                                           HorizontalAlignment="Right"
+                                           Foreground="#F7FAFC"
+                                           FontSize="13" />
+                                <Slider x:Name="CrtGlitchSlider"
+                                        Grid.Row="7"
+                                        Grid.ColumnSpan="2"
+                                        Minimum="0"
+                                        Maximum="100"
+                                        Value="0"
+                                        PointerPressed="CrtEffectSlider_PointerPressed"
+                                        PointerMoved="CrtEffectSlider_PointerMoved"
+                                        PointerReleased="CrtEffectSlider_PointerReleased"
+                                        ValueChanged="CrtEffectSlider_ValueChanged" />
+
+                                <TextBlock Grid.Row="8"
+                                           Text="Vignette"
+                                           Foreground="{StaticResource SoftTextBrush}"
+                                           FontSize="13" />
+                                <TextBlock x:Name="CrtVignetteValueText"
+                                           Grid.Row="8"
+                                           Grid.Column="1"
+                                           Text="52%"
+                                           HorizontalAlignment="Right"
+                                           Foreground="#F7FAFC"
+                                           FontSize="13" />
+                                <Slider x:Name="CrtVignetteSlider"
+                                        Grid.Row="9"
+                                        Grid.ColumnSpan="2"
+                                        Minimum="0"
+                                        Maximum="100"
+                                        Value="52"
+                                        PointerPressed="CrtEffectSlider_PointerPressed"
+                                        PointerMoved="CrtEffectSlider_PointerMoved"
+                                        PointerReleased="CrtEffectSlider_PointerReleased"
+                                        ValueChanged="CrtEffectSlider_ValueChanged" />
+                            </Grid>
+
+                            <Grid RowDefinitions="Auto,46,Auto,46,Auto"
+                                  ColumnDefinitions="*,48">
+                                <TextBlock Text="Fresnel"
+                                           Foreground="{StaticResource SoftTextBrush}"
+                                           FontSize="13" />
+                                <TextBlock x:Name="GlassFresnelValueText"
+                                           Grid.Column="1"
+                                           Text="58%"
+                                           HorizontalAlignment="Right"
+                                           Foreground="#F7FAFC"
+                                           FontSize="13" />
+
+                                <Grid x:Name="GlassFresnelSliderShell"
+                                      Grid.Row="1"
+                                      Grid.ColumnSpan="2"
+                                      Height="46"
+                                      Background="Transparent"
+                                      SizeChanged="GlassFresnelSliderShell_SizeChanged"
+                                      PointerPressed="GlassFresnelSliderShell_PointerPressed"
+                                      PointerMoved="GlassFresnelSliderShell_PointerMoved"
+                                      PointerReleased="GlassFresnelSliderShell_PointerReleased"
+                                      PointerCaptureLost="GlassFresnelSliderShell_PointerCaptureLost">
+                                    <Border Height="5"
+                                            VerticalAlignment="Center"
+                                            Background="#263140"
+                                            CornerRadius="2.5" />
+                                    <Border x:Name="GlassFresnelSliderFill"
+                                            Width="0"
+                                            Height="5"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Background="#BCEEFF"
+                                            CornerRadius="2.5" />
+                                    <Border x:Name="GlassFresnelSliderThumb"
+                                            Width="18"
+                                            Height="18"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Background="#BCEEFF"
+                                            BorderBrush="#F7FAFC"
+                                            BorderThickness="1"
+                                            CornerRadius="5" />
+                                    <Slider x:Name="GlassFresnelSlider"
+                                            Minimum="0"
+                                            Maximum="100"
+                                            Value="58"
+                                            Height="46"
+                                            Opacity="0.01"
+                                            Focusable="False"
+                                            IsHitTestVisible="False"
+                                            ValueChanged="GlassFresnelSlider_ValueChanged" />
+                                </Grid>
+
+                                <Grid Grid.Row="4"
+                                      Grid.ColumnSpan="2"
+                                      RowDefinitions="Auto,36"
+                                      ColumnDefinitions="*,48">
+                                    <TextBlock Text="Glass texture"
+                                               Foreground="{StaticResource SoftTextBrush}"
+                                               FontSize="13" />
+                                    <TextBlock x:Name="GlassTextureOpacityValueText"
+                                               Grid.Column="1"
+                                               Text="10%"
+                                               HorizontalAlignment="Right"
+                                               Foreground="#F7FAFC"
+                                               FontSize="13" />
+                                    <Slider x:Name="GlassTextureOpacitySlider"
+                                            Grid.Row="1"
+                                            Grid.ColumnSpan="2"
+                                            Minimum="0"
+                                            Maximum="100"
+                                            Value="10"
+                                            ValueChanged="GlassTextureOpacitySlider_ValueChanged" />
+                                </Grid>
+
+                                <TextBlock Grid.Row="2"
+                                           Text="Corner"
+                                           Foreground="{StaticResource SoftTextBrush}"
+                                           FontSize="13" />
+                                <TextBlock x:Name="CornerRadiusValueText"
+                                           Grid.Row="2"
+                                           Grid.Column="1"
+                                           Text="8px"
+                                           HorizontalAlignment="Right"
+                                           Foreground="#F7FAFC"
+                                           FontSize="13" />
+
+                                <Grid x:Name="CornerRadiusSliderShell"
+                                      Grid.Row="3"
+                                      Grid.ColumnSpan="2"
+                                      Height="46"
+                                      Background="Transparent"
+                                      SizeChanged="CornerRadiusSliderShell_SizeChanged"
+                                      PointerPressed="CornerRadiusSliderShell_PointerPressed"
+                                      PointerMoved="CornerRadiusSliderShell_PointerMoved"
+                                      PointerReleased="CornerRadiusSliderShell_PointerReleased"
+                                      PointerCaptureLost="CornerRadiusSliderShell_PointerCaptureLost">
+                                    <Border Height="5"
+                                            VerticalAlignment="Center"
+                                            Background="#263140"
+                                            CornerRadius="2.5" />
+                                    <Border x:Name="CornerRadiusSliderFill"
+                                            Width="0"
+                                            Height="5"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Background="#94A0A6"
+                                            CornerRadius="2.5" />
+                                    <Border x:Name="CornerRadiusSliderThumb"
+                                            Width="18"
+                                            Height="18"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Background="#D3D8DB"
+                                            BorderBrush="#F7FAFC"
+                                            BorderThickness="1"
+                                            CornerRadius="5" />
+                                    <Slider x:Name="CornerRadiusSlider"
+                                            Minimum="4"
+                                            Maximum="28"
+                                            Value="8"
+                                            Height="46"
+                                            Opacity="0.01"
+                                            Focusable="False"
+                                            IsHitTestVisible="False"
+                                            ValueChanged="CornerRadiusSlider_ValueChanged" />
+                                </Grid>
+                            </Grid>
+
+                            <Grid ColumnDefinitions="*,34" IsVisible="False" IsEnabled="False">
+                                <TextBlock Text="Keep visible"
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource SoftTextBrush}"
+                                           FontSize="13" />
+
+                                <ToggleButton x:Name="KeepSatisfactionVisibleToggle"
+                                              Grid.Column="1"
+                                              IsChecked="True"
+                                              HorizontalAlignment="Right"
+                                              VerticalAlignment="Center"
+                                              Classes="option-toggle"
+                                              ToolTip.Tip="Keep visible"
+                                              Click="KeepSatisfactionVisibleToggle_Click">
+                                    <Grid Width="30"
+                                          Height="30">
+                                        <Border x:Name="OptionBox"
+                                                Background="#9CA5A2"
+                                                BorderBrush="#4E5757"
+                                                BorderThickness="1"
+                                                CornerRadius="15" />
+                                        <Border x:Name="OptionMark"
+                                                Width="10"
+                                                Height="10"
+                                                Background="#1C2020"
+                                                CornerRadius="5"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                IsVisible="True" />
+                                    </Grid>
+                                </ToggleButton>
+                            </Grid>
                             </StackPanel>
                         </StackPanel>
-
-                        <local:SpeakerGrilleControl Grid.Column="2"
-                                                    HorizontalAlignment="Right"
-                                                    VerticalAlignment="Center"
-                                                    Width="172"
-                                                    Height="56"
-                                                    IsHitTestVisible="False" />
-                    </Grid>
-                </Border>
-            </Grid>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
         </Border>
     </Grid>
 </Window>

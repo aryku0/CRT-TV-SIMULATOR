@@ -2,14 +2,13 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\DVD_video_logo.png" />
-    <AvaloniaResource Include="Assets\fullscreen_icon.png" />
     <AvaloniaResource Include="Assets\Fonts\*.otf" />
     <None Update="Assets\*.mp3">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -17,9 +16,12 @@
     <None Update="Assets\Fonts\*.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\retro_90s_tv\**\*.*" Link="Assets\Models\retro_90s_tv\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Ab4d.SharpEngine.AvaloniaUI" Version="4.0.9594" />
+    <PackageReference Include="Ab4d.SharpEngine.glTF" Version="4.0.9594" />
     <PackageReference Include="Avalonia" Version="12.1.1" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
@@ -29,6 +31,8 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="NAudio" Version="3.0.1" />
+    <PackageReference Include="YoutubeExplode" Version="6.6.2" />
   </ItemGroup>
 
 </Project>
+    

@@ -15,7 +15,9 @@ The built-in DVD screensaver includes a satisfaction slider that changes how oft
 - Built a custom animated DVD fallback signal that moves around a fixed screen area.
 - Added a 3D CRT television model to act as the physical display housing.
 - Designed the screen surface so it can display changing input content instead of only the DVD logo.
-- Planned the input flow so active content takes priority and the DVD screensaver appears when no input is connected.
+- Added an FFmpeg video-file input path that decodes frames into the TV screen.
+- Added Windows Graphics Capture input for selecting a live application window or display.
+- Added input switching so active content takes priority and the DVD screensaver returns when input is stopped.
 - Added collision detection so the logo reacts when it hits walls or corners.
 - Added random bounce sound effects using bundled MP3 files.
 - Added random logo colour changes on selected bounces.
@@ -35,6 +37,8 @@ The built-in DVD screensaver includes a satisfaction slider that changes how oft
 - **Ab4d.SharpEngine 4.0.9594** for rendering the interactive 3D CRT television.
 - **Ab4d.SharpEngine.glTF 4.0.9594** for importing the retro TV model.
 - **NAudio 3.0.1** for playing the bundled MP3 bounce sounds.
+- **FFmpeg** as an external decoder process for local video files. The app looks for `ffmpeg.exe` beside the app or on `PATH`, and can ask the user to locate it.
+- **Windows Graphics Capture** for live window and display capture on Windows.
 - **SkiaSharp bitmap support** through the SharpEngine/Avalonia rendering stack.
 - **AXAML** for the Avalonia interface layout.
 - **Git and GitHub** for version control and sharing the project.
@@ -44,7 +48,7 @@ The built-in DVD screensaver includes a satisfaction slider that changes how oft
 The app includes a clean retro-inspired interface with:
 
 - A CRT television display with a DVD logo no-signal screen.
-- A screen pipeline being developed to accept image, video, camera, or captured-screen input.
+- A screen pipeline that accepts FFmpeg video playback or live Windows Graphics Capture input.
 - A custom Start button.
 - A satisfaction slider.
 - A fullscreen icon button.
@@ -63,7 +67,9 @@ At 100% satisfaction, the logo is designed to aim perfectly. At lower values, th
 
 The long-term goal is for the app to behave like a simulated CRT television rather than a single-purpose screensaver. When an active input is available, its content should be rendered on the TV screen. When there is no active input, the bouncing DVD logo becomes the default no-signal screen.
 
-Potential inputs include local images and videos, a webcam feed, or desktop capture. External HDMI, console, or other physical video sources require a compatible capture device so Windows can receive the signal.
+The current inputs are local video files through FFmpeg and live window/display capture through Windows Graphics Capture. A webcam feed or external HDMI/console source can be added later through a compatible capture device or camera API.
+
+When opening a video, place `ffmpeg.exe` beside the app, add it to `PATH`, or select it when the app asks where it is. The decoded stream is converted to BGRA frames, fitted to the TV screen, and passed through the existing CRT treatment.
 
 Power transitions are part of the TV simulation: powering off fades and flickers the screen to black, while powering on restores the active input or starts the DVD fallback screen.
 
